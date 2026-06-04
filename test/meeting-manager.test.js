@@ -46,3 +46,22 @@ test('stop finalizes and clears the active key', async () => {
   assert.equal(mgr.isActive('g', 'c'), false);
   assert.ok(db.getMeeting(id));
 });
+
+test('stop() twice finalizes once and is a no-op the second time', async () => {
+  const db = openDb(':memory:');
+  let finalizeCalls = 0;
+  const mgr = new MeetingManager({
+    db,
+    audioRoot: '/tmp/audio',
+    startCapture: () => ({ registry: { list: () => [] } }),
+    finalize: async () => { finalizeCalls += 1; },
+    now: () => '2026-06-04T10:00:00Z',
+  });
+  mgr.start({ guildId: 'g', channelId: 'c', channelName: 'x', connection: {}, guild: {}, attendees: [] });
+  const first = await mgr.stop('g', 'c');
+  const second = await mgr.stop('g', 'c');
+  assert.ok(first);                 // first stop returns the meetingId
+  assert.equal(second, null);       // second stop is a no-op
+  assert.equal(finalizeCalls, 1);   // finalize fired exactly once
+  assert.equal(mgr.isActive('g', 'c'), false);
+});

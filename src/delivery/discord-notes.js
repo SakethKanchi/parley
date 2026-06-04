@@ -76,7 +76,8 @@ export function renderNotes(notes, talktime, meta) {
 
 /**
  * Split text into chunks that each fit within `limit` characters.
- * Splits on newlines; a single line longer than limit is pushed as-is.
+ * Splits on newlines; a single line longer than limit is hard-split so no
+ * emitted chunk can exceed Discord's cap.
  * Default limit is 1900 (safely under Discord's 2000-char message cap).
  *
  * @param {string} text
@@ -87,14 +88,20 @@ export function chunk(text, limit = 1900) {
   if (text.length <= limit) return [text];
   const out = [];
   let cur = '';
-  for (const line of text.split('\n')) {
-    if (cur.length + line.length + 1 > limit) {
-      if (cur) out.push(cur);
-      cur = line;
-    } else {
-      cur = cur ? `${cur}\n${line}` : line;
+  const pushCur = () => { if (cur) { out.push(cur); cur = ''; } };
+  for (const rawLine of text.split('\n')) {
+    // Hard-split any single line longer than the limit (e.g. a degraded LLM
+    // response dumped into tldr) so no emitted chunk can exceed Discord's cap.
+    const segments = rawLine.length > limit ? rawLine.match(new RegExp(`.{1,${limit}}`, 'g')) : [rawLine];
+    for (const line of segments) {
+      if (cur.length + line.length + 1 > limit) {
+        pushCur();
+        cur = line;
+      } else {
+        cur = cur ? `${cur}\n${line}` : line;
+      }
     }
   }
-  if (cur) out.push(cur);
+  pushCur();
   return out;
 }

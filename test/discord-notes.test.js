@@ -37,3 +37,28 @@ test('chunk splits text under the limit on newlines', () => {
   assert.ok(parts.every((p) => p.length <= 3));
   assert.equal(parts.join('\n'), 'a\nb\nc');
 });
+
+test('chunk hard-splits a single line longer than the limit', () => {
+  const long = 'x'.repeat(25);
+  const parts = chunk(long, 10);
+  assert.ok(parts.every((p) => p.length <= 10));
+  assert.equal(parts.join(''), long);
+});
+
+test('renderNotes omits empty optional sections but keeps Action Items', () => {
+  const md = renderNotes(
+    { tldr: 'hi', topics: [], decisions: [], openQuestions: [], actionItems: [] },
+    [],
+    { channelName: 'g', date: 'd' }
+  );
+  assert.doesNotMatch(md, /## Topics/);
+  assert.doesNotMatch(md, /## Decisions/);
+  assert.doesNotMatch(md, /## Open Questions/);
+  assert.doesNotMatch(md, /## Talk Time/);
+  assert.match(md, /## Action Items/);
+  assert.match(md, /_None\._/);
+});
+
+test('chunk leaves short text as a single piece', () => {
+  assert.deepEqual(chunk('short', 1900), ['short']);
+});

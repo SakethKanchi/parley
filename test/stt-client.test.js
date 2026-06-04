@@ -33,3 +33,12 @@ test('transcribeFile throws after exhausting retries', async () => {
     /boom2/
   );
 });
+
+test('transcribeFile surfaces a timeout abort error after retries', async () => {
+  // fetchImpl that always throws a TimeoutError-like error, ignoring the signal
+  const fetchImpl = async () => { throw new Error('The operation timed out'); };
+  await assert.rejects(
+    transcribeFile('/tmp/a.wav', {}, { baseUrl: 'http://x', fetchImpl, readFile: async () => Buffer.from('x'), retries: 1, timeoutMs: 5 }),
+    /timed out/
+  );
+});

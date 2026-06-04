@@ -1,6 +1,4 @@
-import { createWriteStream } from 'node:fs';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { createWriteStream, mkdirSync } from 'node:fs';
 import prism from 'prism-media';
 import { EndBehaviorType } from '@discordjs/voice';
 import { pcmName } from './audio.js';
@@ -33,7 +31,6 @@ export function attachCapture({ connection, guild, audioDir, registry, now = () 
 
     const startMs = now();
     const pcmPath = `${audioDir}/${pcmName(userId, startMs)}`;
-    mkdirSync(dirname(pcmPath), { recursive: true });
 
     const opusStream = connection.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 } });
     const decoder = new prism.opus.Decoder({ rate: 16000, channels: 1, frameSize: 320 });
@@ -42,7 +39,12 @@ export function attachCapture({ connection, guild, audioDir, registry, now = () 
 
     registry.begin(userId, member.displayName, startMs, pcmPath, { opusStream, decoder, out });
 
-    const end = () => { try { out.end(); } catch { /* ignore */ } try { opusStream.destroy(); } catch { /* ignore */ } registry.finish(userId); };
+    const end = () => {
+      try { out.end(); } catch { /* ignore */ }
+      try { decoder.destroy(); } catch { /* ignore */ }
+      try { opusStream.destroy(); } catch { /* ignore */ }
+      registry.finish(userId);
+    };
     opusStream.on('end', end);
     opusStream.on('error', end);
     decoder.on('error', end);

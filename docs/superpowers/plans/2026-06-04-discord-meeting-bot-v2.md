@@ -1785,18 +1785,33 @@ export function attachCapture({ connection, guild, audioDir, registry, now = () 
     const out = createWriteStream(pcmPath);
     opusStream.pipe(decoder).pipe(out);
 
-    registry.begin(userId, member.displayName, startMs, pcmPath, { opusStream, decoder, out });
-
     const end = () => {
       try { out.end(); } catch { /* ignore */ }
       try { decoder.destroy(); } catch { /* ignore */ }
       try { opusStream.destroy(); } catch { /* ignore */ }
       registry.finish(userId);
     };
+
+    registry.begin(userId, member.displayName, startMs, pcmPath, { opusStream, decoder, out, end });
+
     opusStream.on('end', end);
     opusStream.on('error', end);
     decoder.on('error', end);
   });
+
+  return {
+    // End every still-active speaking turn and wait for its PCM to flush, so a
+    // manual /leave or auto-leave never loses the final in-flight utterance.
+    async stopAll() {
+      const actives = [...registry.active.values()];
+      await Promise.all(actives.map((t) => new Promise((resolve) => {
+        if (t.out.writableFinished) { resolve(); return; }
+        t.out.once('finish', resolve);
+        t.out.once('close', resolve);
+        t.end();
+      })));
+    },
+  };
 }
 ```
 
@@ -1906,8 +1921,8 @@ export class MeetingManager {
     for (const a of attendees || []) this.db.addAttendee(meetingId, a.id, a.displayName);
 
     const audioDir = `${this.audioRoot}/${meetingId}`;
-    const { registry } = this.startCapture({ meetingId, connection, guild, audioDir });
-    this.active.set(k, { meetingId, connection, guild, registry, audioDir });
+    const { registry, stopAll } = this.startCapture({ meetingId, connection, guild, audioDir });
+    this.active.set(k, { meetingId, connection, guild, registry, stopAll, audioDir });
     return meetingId;
   }
 
@@ -1916,6 +1931,7 @@ export class MeetingManager {
     const session = this.active.get(k);
     if (!session) return null;
     this.active.delete(k);
+    if (session.stopAll) await session.stopAll();  // flush in-flight speaking turns before harvesting tracks
     const tracks = session.registry.list();
     await this.finalize(session.meetingId, tracks, session);
     return session.meetingId;
@@ -2193,6 +2209,7 @@ export async function postNotes({ client, meeting, cfg, notes, talktime }) {
 import { Client, GatewayIntentBits, ChannelType } from 'discord.js';
 import { joinVoiceChannel, getVoiceConnection, entersState, VoiceConnectionStatus } from '@discordjs/voice';
 import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
 import { config, validateEnv } from './config/env.js';
 import { openDb } from './store/db.js';
 import { getGuildConfig, setGuildConfig } from './store/config.js';
@@ -2222,8 +2239,8 @@ const manager = new MeetingManager({
   db, audioRoot,
   startCapture: ({ meetingId, connection, guild, audioDir }) => {
     const registry = new TrackRegistry();
-    attachCapture({ connection, guild, audioDir, registry });
-    return { registry };
+    const { stopAll } = attachCapture({ connection, guild, audioDir, registry });
+    return { registry, stopAll };
   },
   finalize: async (meetingId, tracks, session) => {
     const meeting = db.getMeeting(meetingId);
@@ -2235,6 +2252,8 @@ const manager = new MeetingManager({
         summarizer: getSummarizer(cfg),
         deliver: async (notes, talktime) => postNotes({ client, meeting, cfg, notes, talktime }),
       });
+      // Success: delete the meeting's audio. On failure we keep the PCM for manual retry.
+      await rm(session.audioDir, { recursive: true, force: true }).catch(() => {});
     } catch (err) {
       console.error(`Meeting ${meetingId} failed:`, err.message);
       const ch = await client.channels.fetch(cfg.notesChannelId || meeting.channel_id).catch(() => null);
@@ -2255,6 +2274,9 @@ async function joinAndStart(channel) {
     adapterCreator: channel.guild.voiceAdapterCreator, selfDeaf: false, selfMute: true,
   });
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+  // A concurrent voiceStateUpdate may have started recording this channel while
+  // we awaited the connection — bail and drop the redundant connection.
+  if (manager.isActive(channel.guild.id, channel.id)) { connection.destroy(); return; }
   const attendees = channel.members.filter((m) => !m.user.bot).map((m) => ({ id: m.id, displayName: m.displayName }));
   manager.start({ guildId: channel.guild.id, channelId: channel.id, channelName: channel.name, connection, guild: channel.guild, attendees });
   setRecIndicator(channel.guild, true);

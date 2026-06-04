@@ -34,7 +34,10 @@ async def transcribe(file: UploadFile = File(...), model: str = Form("small"), l
                 "words": words,
                 "language": getattr(info, "language", language)}
     finally:
-        os.unlink(path)
+        try:
+            os.unlink(path)
+        except OSError:
+            pass  # cleanup failure must not mask a transcription error
 
 if __name__ == "__main__":
     import uvicorn

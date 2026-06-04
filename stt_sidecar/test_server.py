@@ -30,3 +30,19 @@ def test_transcribe_returns_text(monkeypatch):
     body = r.json()
     assert body["text"] == "hello world"
     assert body["words"][0]["word"] == "hello"
+
+def test_transcribe_rebuilds_model_on_name_change(monkeypatch):
+    # A model is warm under a different name; a request for "small" must rebuild.
+    _state["model"] = FakeModel()
+    _state["model_name"] = "large"
+    built = {}
+    def fake_ctor(name, **kwargs):
+        built["name"] = name
+        return FakeModel()
+    monkeypatch.setattr("server.WhisperModel", fake_ctor)
+    client = TestClient(app)
+    r = client.post("/transcribe",
+                    files={"file": ("a.wav", make_silent_wav(), "audio/wav")},
+                    data={"model": "small"})
+    assert r.status_code == 200
+    assert built["name"] == "small"  # rebuilt with the requested model, not stale "large"

@@ -74,13 +74,15 @@ export function openDb(path) {
       return sql.prepare(`SELECT * FROM utterances WHERE meeting_id = ? ORDER BY start_ms`).all(meetingId);
     },
     searchUtterances(guildId, keyword) {
+      // Bind user input as a quoted FTS5 phrase literal so operator chars never throw.
+      const safe = `"${String(keyword).replace(/"/g, '""')}"`;
       return sql.prepare(
         `SELECT u.* FROM utterances_fts f
          JOIN utterances u ON u.id = f.rowid
          JOIN meetings m ON m.id = u.meeting_id
          WHERE m.guild_id = ? AND utterances_fts MATCH ?
          ORDER BY u.meeting_id DESC LIMIT 50`
-      ).all(guildId, keyword);
+      ).all(guildId, safe);
     },
     saveSummary(meetingId, notes, talktime, modelUsed, createdAt = new Date().toISOString()) {
       sql.prepare(
@@ -91,7 +93,8 @@ export function openDb(path) {
     getSummary(meetingId) {
       const row = sql.prepare(`SELECT * FROM summaries WHERE meeting_id = ?`).get(meetingId);
       if (!row) return null;
-      return { ...row, notes: JSON.parse(row.notes_json), talktime: JSON.parse(row.talktime_json) };
+      const { notes_json, talktime_json, ...rest } = row;
+      return { ...rest, notes: JSON.parse(notes_json), talktime: JSON.parse(talktime_json) };
     },
   };
 }

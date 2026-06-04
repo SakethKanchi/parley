@@ -53,3 +53,22 @@ test('findOrphanedMeetings returns recording/processing', () => {
   db.setMeetingStatus(b, 'done', 't2');
   assert.deepEqual(db.findOrphanedMeetings().map((m) => m.id), [a]);
 });
+
+test('searchUtterances does not throw on FTS operator characters', () => {
+  const db = openDb(':memory:');
+  const id = db.createMeeting({ guildId: 'g', channelId: 'c', channelName: 'x', startedAt: 't' });
+  db.addUtterance({ meetingId: id, userId: 'u1', displayName: 'Alice', startMs: 0, endMs: 1000, text: 'ship the rocket today' });
+  assert.doesNotThrow(() => db.searchUtterances('g', 'rocket OR ('));
+  // a normal single-word query still finds the utterance (phrase of one token)
+  assert.equal(db.searchUtterances('g', 'rocket').length, 1);
+});
+
+test('getSummary does not leak raw json columns', () => {
+  const db = openDb(':memory:');
+  const id = db.createMeeting({ guildId: 'g', channelId: 'c', channelName: 'x', startedAt: 't' });
+  db.saveSummary(id, { tldr: 'hi' }, [{ displayName: 'Alice', ms: 1, words: 1, pct: 100 }], 'm');
+  const s = db.getSummary(id);
+  assert.equal('notes_json' in s, false);
+  assert.equal('talktime_json' in s, false);
+  assert.equal(s.notes.tldr, 'hi');
+});

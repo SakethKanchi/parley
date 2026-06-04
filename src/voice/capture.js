@@ -37,16 +37,31 @@ export function attachCapture({ connection, guild, audioDir, registry, now = () 
     const out = createWriteStream(pcmPath);
     opusStream.pipe(decoder).pipe(out);
 
-    registry.begin(userId, member.displayName, startMs, pcmPath, { opusStream, decoder, out });
-
     const end = () => {
       try { out.end(); } catch { /* ignore */ }
       try { decoder.destroy(); } catch { /* ignore */ }
       try { opusStream.destroy(); } catch { /* ignore */ }
       registry.finish(userId);
     };
+
+    registry.begin(userId, member.displayName, startMs, pcmPath, { opusStream, decoder, out, end });
+
     opusStream.on('end', end);
     opusStream.on('error', end);
     decoder.on('error', end);
   });
+
+  return {
+    // End every still-active speaking turn and wait for its PCM to flush, so a
+    // manual /leave or auto-leave never loses the final in-flight utterance.
+    async stopAll() {
+      const actives = [...registry.active.values()];
+      await Promise.all(actives.map((t) => new Promise((resolve) => {
+        if (t.out.writableFinished) { resolve(); return; }
+        t.out.once('finish', resolve);
+        t.out.once('close', resolve);
+        t.end();
+      })));
+    },
+  };
 }

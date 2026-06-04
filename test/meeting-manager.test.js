@@ -65,3 +65,21 @@ test('stop() twice finalizes once and is a no-op the second time', async () => {
   assert.equal(finalizeCalls, 1);   // finalize fired exactly once
   assert.equal(mgr.isActive('g', 'c'), false);
 });
+
+test('stop flushes via stopAll before harvesting tracks and finalizing', async () => {
+  const db = openDb(':memory:');
+  const order = [];
+  const mgr = new MeetingManager({
+    db,
+    audioRoot: '/tmp/audio',
+    startCapture: () => ({
+      registry: { list: () => { order.push('list'); return []; } },
+      stopAll: async () => { order.push('stopAll'); },
+    }),
+    finalize: async () => { order.push('finalize'); },
+    now: () => '2026-06-04T10:00:00Z',
+  });
+  mgr.start({ guildId: 'g', channelId: 'c', channelName: 'x', connection: {}, guild: {}, attendees: [] });
+  await mgr.stop('g', 'c');
+  assert.deepEqual(order, ['stopAll', 'list', 'finalize']);
+});

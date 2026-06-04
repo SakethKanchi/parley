@@ -19,8 +19,8 @@ export class MeetingManager {
     for (const a of attendees || []) this.db.addAttendee(meetingId, a.id, a.displayName);
 
     const audioDir = `${this.audioRoot}/${meetingId}`;
-    const { registry } = this.startCapture({ meetingId, connection, guild, audioDir });
-    this.active.set(k, { meetingId, connection, guild, registry, audioDir });
+    const { registry, stopAll } = this.startCapture({ meetingId, connection, guild, audioDir });
+    this.active.set(k, { meetingId, connection, guild, registry, stopAll, audioDir });
     return meetingId;
   }
 
@@ -29,6 +29,7 @@ export class MeetingManager {
     const session = this.active.get(k);
     if (!session) return null;
     this.active.delete(k);
+    if (session.stopAll) await session.stopAll();  // flush in-flight speaking turns first
     const tracks = session.registry.list();
     await this.finalize(session.meetingId, tracks, session);
     return session.meetingId;

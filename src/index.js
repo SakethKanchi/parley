@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, ChannelType } from 'discord.js';
 import { joinVoiceChannel, getVoiceConnection, entersState, VoiceConnectionStatus } from '@discordjs/voice';
 import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
 import { config, validateEnv } from './config/env.js';
 import { openDb } from './store/db.js';
 import { getGuildConfig, setGuildConfig } from './store/config.js';
@@ -30,8 +31,8 @@ const manager = new MeetingManager({
   db, audioRoot,
   startCapture: ({ meetingId, connection, guild, audioDir }) => {
     const registry = new TrackRegistry();
-    attachCapture({ connection, guild, audioDir, registry });
-    return { registry };
+    const { stopAll } = attachCapture({ connection, guild, audioDir, registry });
+    return { registry, stopAll };
   },
   finalize: async (meetingId, tracks, session) => {
     const meeting = db.getMeeting(meetingId);
@@ -43,6 +44,8 @@ const manager = new MeetingManager({
         summarizer: getSummarizer(cfg),
         deliver: async (notes, talktime) => postNotes({ client, meeting, cfg, notes, talktime }),
       });
+      // Success: delete the meeting's audio. On failure we keep the PCM for manual retry.
+      await rm(session.audioDir, { recursive: true, force: true }).catch(() => {});
     } catch (err) {
       console.error(`Meeting ${meetingId} failed:`, err.message);
       const ch = await client.channels.fetch(cfg.notesChannelId || meeting.channel_id).catch(() => null);
@@ -63,6 +66,9 @@ async function joinAndStart(channel) {
     adapterCreator: channel.guild.voiceAdapterCreator, selfDeaf: false, selfMute: true,
   });
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+  // A concurrent voiceStateUpdate may have started recording this channel while
+  // we awaited the connection — bail and drop the redundant connection.
+  if (manager.isActive(channel.guild.id, channel.id)) { connection.destroy(); return; }
   const attendees = channel.members.filter((m) => !m.user.bot).map((m) => ({ id: m.id, displayName: m.displayName }));
   manager.start({ guildId: channel.guild.id, channelId: channel.id, channelName: channel.name, connection, guild: channel.guild, attendees });
   setRecIndicator(channel.guild, true);

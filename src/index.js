@@ -19,7 +19,11 @@ const db = openDb(join(config.dataDir, 'meetings.db'));
 const audioRoot = join(config.dataDir, 'audio');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  // Minimal set: Guilds (slash commands + channel cache), GuildVoiceStates
+  // (voiceStateUpdate + channel.members). No messageCreate handler, so the
+  // privileged MessageContent intent is deliberately NOT requested (requesting
+  // it unenabled fails login with 4014).
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
 const manager = new MeetingManager({
@@ -102,6 +106,7 @@ client.on('interactionCreate', async (interaction) => {
     if (commandName === 'join') {
       const vc = member.voice?.channel;
       if (!vc) return interaction.reply({ content: '❌ Join a voice channel first.', ephemeral: true });
+      if (manager.isActive(guild.id, vc.id)) return interaction.reply({ content: '✅ Already recording this channel.', ephemeral: true });
       await interaction.deferReply({ ephemeral: true });
       await joinAndStart(vc);
       return interaction.editReply('✅ Recording started.');

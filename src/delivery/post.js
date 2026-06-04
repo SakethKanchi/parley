@@ -11,7 +11,11 @@ export async function postNotes({ client, meeting, cfg, notes, talktime }) {
 
   let target = channel;
   if (cfg.useThread && channel.type === ChannelType.GuildText) {
-    target = await channel.threads.create({ name: `Notes — ${meeting.channel_name} ${meeting.started_at.slice(0, 10)}` });
+    // Fall back to the channel itself if thread creation fails (e.g. missing perms)
+    // so the notes are never silently lost.
+    target = await channel.threads
+      .create({ name: `Notes — ${meeting.channel_name} ${meeting.started_at.slice(0, 10)}` })
+      .catch(() => channel);
   }
   for (const part of parts) await target.send(part);
 }

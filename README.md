@@ -1,31 +1,86 @@
 <p align="center">
-  <img width="300" src="./misc/logo.png" />
+  <img width="300" src="./misc/logo.png" alt="Discord Meeting Bot logo" />
 </p>
 
-# Discord Meeting Bot
+<h1 align="center">Discord Meeting Bot</h1>
 
-A self-hosted Discord bot that automatically records voice meetings, transcribes audio per-speaker locally, and posts AI-generated structured meeting notes directly in Discord threads. No cloud recording service required.
+<p align="center">
+  Self-hosted Discord bot that records voice meetings, transcribes them per-speaker on your own machine, and posts AI meeting notes straight into Discord.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/node-%3E%3D22.5-339933?logo=node.js&logoColor=white" alt="Node >= 22.5" />
+  <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+" />
+  <img src="https://img.shields.io/badge/license-ISC-blue" alt="License: ISC" />
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome" />
+</p>
+
+---
+
+A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Audio is transcribed locally — only the final transcript text ever leaves your machine (to the summarizer you choose, or nowhere at all if you run a local model). No SaaS account, no per-seat pricing, no cloud recording.
+
+## Table of contents
+
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Running](#running)
+- [Commands](#commands)
+- [Configuration](#configuration)
+- [Supported summarizers](#supported-summarizers)
+- [Privacy & consent](#privacy--consent)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Features
+
+- **Per-speaker transcripts, no ML diarization.** Discord delivers a separate audio stream per user, so every utterance is attributed to the right person exactly — not guessed.
+- **Structured AI notes.** TL;DR, topic sections, decisions, open questions, and **action items grouped by the person responsible**, plus per-speaker talk-time stats.
+- **Pluggable summarizer.** Google Gemini (default, free tier), any OpenAI-compatible endpoint, or fully-offline Ollama — switch per-server with `/setup`, no restart.
+- **Local speech-to-text.** A warm [faster-whisper](https://github.com/SYSTRAN/faster-whisper) sidecar; pick model size from `tiny` to `large-v3-turbo`.
+- **Runs anywhere.** Node's built-in `node:sqlite` (no native build) — works on a Raspberry Pi or a GPU server; only a config value changes.
+- **Searchable history.** `/history`, `/summary`, and full-text `/search` over every past meeting, backed by SQLite FTS5.
+- **Auto join/leave.** Joins when 2+ people are talking, leaves when the room empties. Shows `[REC]` in its nickname while recording.
+- **Concurrent meetings.** Records multiple channels/servers at once — no global single-recording limit.
 
 ## How it works
 
-- Joins a voice channel (manually via `/join` or automatically when 2+ humans are present).
-- Captures each speaker's audio track separately — Discord delivers per-user streams, so speaker attribution is exact with no ML diarization needed.
-- On meeting end, a pipeline transcribes each track through a local faster-whisper sidecar, merges utterances by timestamp, summarizes with a pluggable AI provider, and posts structured notes (TL;DR, topics, decisions, action items) to a Discord thread.
+```
+┌─────────────────────────── Node bot (discord.js) ───────────────────────┐
+│  Gateway events ─→ MeetingManager (per guild+channel, concurrent)        │
+│      │                    │                                              │
+│  per-user PCM capture   pipeline orchestrator                            │
+│      │                    ├─→ STT client ──HTTP──┐                       │
+│  [REC] nickname           ├─→ summarizer adapter │  (gemini|ollama|...)  │
+│                           └─→ SQLite store        │                      │
+└────────────────────────────────────────────────────┼───────────────────┘
+                                                       │ localhost
+                          ┌────────────────────────────▼─────────────┐
+                          │  Python sidecar (FastAPI)                 │
+                          │  faster-whisper, model loaded once (warm) │
+                          └───────────────────────────────────────────┘
+```
+
+1. The bot joins a voice channel (via `/join` or automatically when 2+ humans are present) and writes each speaker's audio to its own track.
+2. When the meeting ends, the orchestrator transcribes every track through the local sidecar, merges utterances into one timestamp-ordered, speaker-labeled transcript, and stores it in SQLite.
+3. The transcript goes to your chosen summarizer, and the structured notes are posted to a Discord thread. Audio is deleted after successful delivery.
 
 ## Prerequisites
 
-- **Node.js >= 22.5** (uses the built-in `node:sqlite` module)
-- **Python 3.10+** for the STT sidecar
-- **ffmpeg** — bundled automatically via `ffmpeg-static` (no system install needed)
-- A Discord application with a bot token ([Discord Developer Portal](https://discord.com/developers/applications))
-- An API key for at least one summarizer (Gemini is the default and has a free tier)
+- **Node.js >= 22.5** — uses the built-in `node:sqlite` module (no native database build).
+- **Python 3.10+** — for the speech-to-text sidecar.
+- **ffmpeg** — bundled automatically via `ffmpeg-static`; no system install needed.
+- A **Discord application + bot token** ([Discord Developer Portal](https://discord.com/developers/applications)).
+- An **API key for at least one summarizer** — Gemini is the default and has a free tier; or run Ollama locally for zero cloud dependency.
 
 ## Installation
 
 ### 1. Clone and install Node dependencies
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/SakethKanchi/Discord_Meeting_Bot.git
 cd Discord_Meeting_Bot
 npm install
 ```
@@ -39,61 +94,60 @@ python -m venv .venv
 cd ..
 ```
 
-The sidecar loads the faster-whisper model once on startup and keeps it warm for the lifetime of the process.
-
 ### 3. Configure environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and fill in the required values:
+Fill in `.env`:
 
 ```env
 # Required
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CLIENT_ID=your_discord_application_id
 
-# STT sidecar URL (default is fine if running locally)
+# STT sidecar URL (default is fine when running locally)
 STT_URL=http://127.0.0.1:8000
 
-# Summarizer — provide the key for whichever provider you use
-GEMINI_API_KEY=your_gemini_api_key      # gemini (default, free tier available)
+# Summarizer — set the key for whichever provider you use
+GEMINI_API_KEY=your_gemini_api_key      # gemini (default, free tier)
 OPENAI_API_KEY=your_openai_api_key      # openai-compatible providers
-OLLAMA_URL=http://127.0.0.1:11434       # ollama (fully offline, no key needed)
+OLLAMA_URL=http://127.0.0.1:11434       # ollama (offline, no key needed)
 
-# Optional: persistent data directory (defaults to /data if present, else cwd)
+# Optional: persistent data dir (defaults to /data if present, else cwd)
 DATA_DIR=
 ```
 
-API keys go in `.env` only. Do not paste keys into Discord — message content is logged by Discord.
+> **Keys live in `.env` only.** `/setup` never accepts an API key — Discord retains message content, so a key typed into chat is a leak.
 
-### 4. Invite the bot to your server
+### 4. Invite the bot
 
-In the Discord Developer Portal, under OAuth2 → URL Generator, select the `bot` and `applications.commands` scopes. Under Bot Permissions, select: Connect, Speak, Use Voice Activity, Send Messages, Create Public Threads, Embed Links. Copy the generated URL and open it to invite the bot.
+In the Developer Portal → **OAuth2 → URL Generator**, select scopes `bot` and `applications.commands`. Under **Bot Permissions** select: Connect, Speak, Use Voice Activity, Send Messages, Create Public Threads, Embed Links. Open the generated URL to invite the bot.
 
-Enable these Privileged Gateway Intents for the bot: **Server Members Intent** (needed to identify humans vs bots for auto-join logic).
+> **No privileged intents required.** The bot runs on the standard `Guilds` and `GuildVoiceStates` intents only — you do **not** need to enable Server Members or Message Content.
 
 ## Running
 
-The bot requires **two processes** running simultaneously:
+The bot needs **two processes** running together.
 
-**Terminal 1 — STT sidecar:**
+**Terminal 1 — STT sidecar** (first transcription downloads the whisper model, one-time):
+
 ```bash
 npm run sidecar
 ```
 
 **Terminal 2 — Discord bot:**
+
 ```bash
 npm start
 ```
 
-For production, use a process manager like pm2 or systemd to run both:
+For production, keep both alive with a process manager:
 
 ```bash
-# pm2 example
 pm2 start "npm run sidecar" --name meeting-sidecar
-pm2 start "npm start" --name meeting-bot
+pm2 start "npm start"       --name meeting-bot
 pm2 save
 ```
 
@@ -102,48 +156,80 @@ pm2 save
 | Command | Description |
 |---------|-------------|
 | `/join` | Join your current voice channel and start recording |
-| `/leave` | Stop recording and leave the voice channel |
-| `/summary` | Post the notes from the most recent meeting in this channel |
-| `/history` | List recent meetings with metadata |
-| `/search <query>` | Full-text search across all meeting transcripts |
-| `/setup` | Configure the bot for this server (see below) |
+| `/leave` | Stop recording, post notes, and leave |
+| `/summary [meeting]` | Post the notes for a meeting (default: most recent) |
+| `/history` | List recent meetings with status |
+| `/search <keyword>` | Full-text search across all meeting transcripts |
+| `/setup` | Configure the bot for this server (admin only) |
 
-**Auto-join / auto-leave:** The bot automatically joins when more than one human is in a voice channel and leaves when only one (or zero) remain. This can be toggled via `/setup`.
+**Auto join/leave:** the bot joins automatically when more than one human is in a voice channel and leaves when one or zero remain. Toggle with `/setup autojoin`.
 
-## Configuration via /setup
+## Configuration
 
-Run `/setup` in any text channel to configure the bot for your server. All settings are per-guild.
+`/setup` (requires the **Manage Server** permission) writes per-guild config, applied without a restart.
 
-| Setting | Description |
-|---------|-------------|
+| Option | Description |
+|--------|-------------|
 | `provider` | Summarizer: `gemini` (default), `openai`, `ollama` |
 | `model` | Model name for the chosen provider |
-| `whisper_model` | faster-whisper model size (e.g. `base`, `small`, `medium`) |
-| `notes_channel` | Channel where meeting notes are posted |
-| `thread` | Whether to post notes as a thread (recommended) |
-| `autojoin` | Enable/disable automatic join on voice activity |
-| `language` | Transcription language hint (e.g. `en`, `es`) |
+| `whisper_model` | faster-whisper size: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo` |
+| `notes_channel` | Text channel where notes are posted (defaults to the meeting's channel) |
+| `thread` | Post notes in a thread (default: on) |
+| `autojoin` | Auto-join when 2+ people are in voice |
+| `language` | Transcription language code, or `auto` |
 
 ## Supported summarizers
 
-- **gemini** (default) — uses Gemini 2.5 Flash. Has a free tier; set `GEMINI_API_KEY`.
-- **openai** — any OpenAI-compatible endpoint; set `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` for third-party providers.
-- **ollama** — fully offline, no API key required. Run Ollama locally and set `OLLAMA_URL`.
+- **gemini** *(default)* — Gemini 2.5 Flash, free tier available. Set `GEMINI_API_KEY`.
+- **openai** — any OpenAI-compatible endpoint. Set `OPENAI_API_KEY` (and `OPENAI_BASE_URL` for third-party gateways).
+- **ollama** — fully offline, no key. Run Ollama locally and set `OLLAMA_URL`.
 
-## Privacy and consent
+All providers return the same structured-notes shape, so output is consistent regardless of which you pick.
 
-The bot sets `[REC]` in its nickname while a recording is active so all channel members can see it. It is your responsibility to obtain consent from all participants before recording, as required by your jurisdiction.
+## Privacy & consent
 
-Audio is processed entirely on the machine running the bot. No audio is sent to any third-party service; only the final transcript text is sent to your chosen summarizer API.
+- The bot shows `[REC]` in its nickname whenever a recording is active, so every member can see it.
+- Audio is transcribed **on the machine running the bot**. No audio is uploaded anywhere; only the final transcript text is sent to your chosen summarizer (and nothing leaves your network at all with Ollama).
+- Recording people's voices is subject to consent laws that vary by jurisdiction (some require all-party consent). **You are responsible for obtaining consent from all participants.**
 
-## Running tests
+## Development
 
 ```bash
-npm test                                          # all Node unit tests
-node --test test/<name>.test.js                   # single test file
-cd stt_sidecar && .venv/bin/python -m pytest test_server.py -q   # sidecar tests
+npm test                                                        # all Node unit tests (node --test)
+node --test test/<name>.test.js                                 # a single test file
+cd stt_sidecar && .venv/bin/python -m pytest test_server.py -q  # sidecar tests
 ```
+
+**Project layout:**
+
+```
+src/
+  config/env.js              # env + DATA_DIR (single source of truth)
+  voice/                     # capture, meeting-manager, audio, decisions
+  pipeline/                  # transcribe, summarize, orchestrator
+  adapters/                  # stt-client + summarizer/{gemini,ollama,openai,fake}
+  store/                     # db (node:sqlite + FTS5), per-guild config
+  delivery/                  # notes rendering + Discord posting
+  commands/                  # slash command definitions + /setup validation
+  index.js                   # entrypoint: events, wiring, boot recovery
+stt_sidecar/                 # Python FastAPI faster-whisper sidecar
+test/                        # node --test suites
+docs/superpowers/            # design spec + implementation plan
+```
+
+**Tech stack:** Node 22.5+ (ESM, `node:sqlite`, native `fetch`, `node --test`), [discord.js](https://discord.js.org) v14, `@discordjs/voice`, `prism-media`, `ffmpeg-static`, `@google/generative-ai`; Python + FastAPI + [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
+
+## Contributing
+
+Contributions are welcome.
+
+1. Fork the repo and create a feature branch.
+2. Keep modules small and single-purpose; follow the existing structure.
+3. Add tests for new logic — `npm test` and the sidecar `pytest` must pass.
+4. Open a pull request describing the change and the reasoning.
+
+For bugs and feature requests, please open an issue.
 
 ## License
 
-ISC
+[ISC](./LICENSE) © Saketh Kanchi

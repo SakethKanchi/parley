@@ -37,7 +37,10 @@ export function getGuildConfig(db, guildId) {
 
 export function setGuildConfig(db, guildId, patch) {
   const current = getGuildConfig(db, guildId);
-  const merged = { ...current, ...patch };
+  // Drop undefined keys (node:sqlite cannot bind undefined) and pin guildId so a
+  // stray patch key can't corrupt the row identity or the returned object.
+  const safePatch = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  const merged = { ...current, ...safePatch, guildId };
   db.sql.prepare(
     `INSERT OR REPLACE INTO guild_config
        (guild_id, summarizer_provider, summarizer_model, whisper_model, notes_channel_id, use_thread, auto_join, language)

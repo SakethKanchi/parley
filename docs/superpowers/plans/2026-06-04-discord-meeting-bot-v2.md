@@ -6,7 +6,9 @@
 
 **Architecture:** Node (discord.js, ESM) handles Discord + orchestration; a persistent Python FastAPI sidecar runs faster-whisper with the model loaded once. Per-user Discord audio streams give free speaker attribution. A pluggable summarizer adapter (Gemini default, Ollama/OpenAI swap) returns a fixed `StructuredNotes` shape consumed by storage + delivery.
 
-**Tech Stack:** Node 18+ (ESM, native `fetch`, `node --test`), discord.js v14, `@discordjs/voice`, `prism-media`, `ffmpeg-static`, `better-sqlite3`, `@google/generative-ai`; Python 3.10+, FastAPI, uvicorn, faster-whisper, pytest.
+**Tech Stack:** Node **22.5+** (ESM, native `fetch`, `node --test`, built-in `node:sqlite` with FTS5 — no native compile), discord.js v14, `@discordjs/voice`, `prism-media`, `ffmpeg-static`, `@google/generative-ai`; Python 3.10+, FastAPI, uvicorn, faster-whisper, pytest.
+
+> **Storage note:** Uses Node's built-in `node:sqlite` (`DatabaseSync`), not `better-sqlite3`. The API is nearly identical (`prepare`/`run`/`get`/`all`, `@name` named params with bare object keys, `lastInsertRowid`), but there is no `.pragma()` helper — use `db.exec("PRAGMA ...")`. This avoids a native build and works on Node 22.5+ (verified on 26.x, FTS5 included). Requires `node --test` / `node src/index.js` on Node 22.5+.
 
 ---
 
@@ -49,11 +51,11 @@ git checkout -b feat/v2-rewrite
     "sidecar": "python stt_sidecar/server.py"
   },
   "license": "ISC",
+  "engines": { "node": ">=22.5.0" },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.19.0",
     "@google/generative-ai": "^0.24.1",
-    "better-sqlite3": "^11.8.0",
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.3",
     "ffmpeg-static": "^5.2.0",
@@ -62,6 +64,8 @@ git checkout -b feat/v2-rewrite
   }
 }
 ```
+
+Storage uses the built-in `node:sqlite` module (no `better-sqlite3` dependency, no native compile).
 
 - [ ] **Step 3: Create `.env.example`**
 
@@ -278,7 +282,7 @@ Expected: FAIL — cannot find module `../src/store/db.js`.
 
 ```js
 // src/store/db.js
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meetings (
@@ -315,8 +319,8 @@ CREATE TABLE IF NOT EXISTS guild_config (
 `;
 
 export function openDb(path) {
-  const sql = new Database(path);
-  sql.pragma('journal_mode = WAL');
+  const sql = new DatabaseSync(path);
+  sql.exec('PRAGMA journal_mode = WAL');
   sql.exec(SCHEMA);
 
   return {

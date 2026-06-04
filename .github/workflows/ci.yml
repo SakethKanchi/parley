@@ -15,10 +15,10 @@ jobs:
     name: Node tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           # Node 24+: built-in node:sqlite is unflagged. Project requires >= 22.5.
           node-version: '24'
@@ -37,10 +37,10 @@ jobs:
       run:
         working-directory: stt_sidecar
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip

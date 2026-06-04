@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="0%" r="70%">
+      <stop offset="0%" stop-color="#5865F2" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#5865F2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="360" fill="#0A0B0F"/>
+  <rect width="1280" height="360" fill="url(#glow)"/>
+  <g><line x1="557.5" y1="102" x2="557.5" y2="138" stroke="#5865F2" stroke-width="6" stroke-linecap="round"/><line x1="572.5" y1="90" x2="572.5" y2="150" stroke="#5865F2" stroke-width="6" stroke-linecap="round"/><line x1="587.5" y1="74" x2="587.5" y2="166" stroke="#5865F2" stroke-width="6" stroke-linecap="round"/><line x1="602.5" y1="84" x2="602.5" y2="156" stroke="#5865F2" stroke-width="6" stroke-linecap="round"/><line x1="617.5" y1="96" x2="617.5" y2="144" stroke="#5865F2" stroke-width="6" stroke-linecap="round"/><line x1="632.5" y1="105" x2="632.5" y2="135" stroke="#5865F2" stroke-width="6" stroke-linecap="round"/><line x1="647.5" y1="98" x2="647.5" y2="142" stroke="#5865F2" stroke-width="6" stroke-linecap="round"/><line x1="662.5" y1="120" x2="722.5" y2="120" stroke="#23A559" stroke-width="6" stroke-linecap="round"/></g>
+  <text x="640" y="238" text-anchor="middle" font-family="Space Grotesk, DejaVu Sans, sans-serif" font-size="94" font-weight="700" letter-spacing="-2" fill="#E6E8EE">Parley</text>
+  <text x="640" y="284" text-anchor="middle" font-family="Inter, DejaVu Sans, sans-serif" font-size="27" fill="#8A90A2">Self-hosted Discord meeting notes</text>
+  <text x="640" y="326" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="16" letter-spacing="3" fill="#6F7689">PER-SPEAKER TRANSCRIPTS · LOCAL WHISPER · STRUCTURED AI NOTES</text>
+</svg>

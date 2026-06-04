@@ -1,18 +1,25 @@
 <p align="center">
-  <img width="300" src="./misc/logo.png" alt="Discord Meeting Bot logo" />
+  <img src="./assets/banner.png" width="820" alt="Parley — self-hosted Discord meeting notes" />
 </p>
 
-<h1 align="center">Discord Meeting Bot</h1>
-
 <p align="center">
-  Self-hosted Discord bot that records voice meetings, transcribes them per-speaker on your own machine, and posts AI meeting notes straight into Discord.
+  <b>Parley</b> records your Discord voice meetings, transcribes them per-speaker on your own machine,
+  and posts structured AI meeting notes straight into a thread.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/node-%3E%3D22.5-339933?logo=node.js&logoColor=white" alt="Node >= 22.5" />
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+" />
-  <img src="https://img.shields.io/badge/license-ISC-blue" alt="License: ISC" />
-  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome" />
+  <img src="https://img.shields.io/badge/license-ISC-5865F2" alt="License: ISC" />
+  <img src="https://img.shields.io/badge/PRs-welcome-23A559" alt="PRs welcome" />
+  <img src="https://img.shields.io/badge/self--hosted-100%25-0A0B0F" alt="Self-hosted" />
+</p>
+
+<p align="center">
+  <a href="https://sakethkanchi.github.io/parley/"><b>🌐 Website</b></a> ·
+  <a href="#-installation"><b>🚀 Install</b></a> ·
+  <a href="#-commands"><b>💬 Commands</b></a> ·
+  <a href="#-privacy--consent"><b>🔒 Privacy</b></a>
 </p>
 
 ---
@@ -21,20 +28,20 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 
 ## Table of contents
 
-- [Features](#features)
-- [How it works](#how-it-works)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Running](#running)
-- [Commands](#commands)
-- [Configuration](#configuration)
-- [Supported summarizers](#supported-summarizers)
-- [Privacy & consent](#privacy--consent)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
+- [Features](#-features)
+- [How it works](#-how-it-works)
+- [Prerequisites](#-prerequisites)
+- [Installation](#-installation)
+- [Running](#-running)
+- [Commands](#-commands)
+- [Configuration](#-configuration)
+- [Supported summarizers](#-supported-summarizers)
+- [Privacy & consent](#-privacy--consent)
+- [Development](#-development)
+- [Contributing](#-contributing)
+- [License](#-license)
 
-## Features
+## ✨ Features
 
 - **Per-speaker transcripts, no ML diarization.** Discord delivers a separate audio stream per user, so every utterance is attributed to the right person exactly — not guessed.
 - **Structured AI notes.** TL;DR, topic sections, decisions, open questions, and **action items grouped by the person responsible**, plus per-speaker talk-time stats.
@@ -45,7 +52,7 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 - **Auto join/leave.** Joins when 2+ people are talking, leaves when the room empties. Shows `[REC]` in its nickname while recording.
 - **Concurrent meetings.** Records multiple channels/servers at once — no global single-recording limit.
 
-## How it works
+## ⚙️ How it works
 
 ```
 ┌─────────────────────────── Node bot (discord.js) ───────────────────────┐
@@ -67,7 +74,7 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 2. When the meeting ends, the orchestrator transcribes every track through the local sidecar, merges utterances into one timestamp-ordered, speaker-labeled transcript, and stores it in SQLite.
 3. The transcript goes to your chosen summarizer, and the structured notes are posted to a Discord thread. Audio is deleted after successful delivery.
 
-## Prerequisites
+## 📦 Prerequisites
 
 - **Node.js >= 22.5** — uses the built-in `node:sqlite` module (no native database build).
 - **Python 3.10+** — for the speech-to-text sidecar.
@@ -75,7 +82,7 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 - A **Discord application + bot token** ([Discord Developer Portal](https://discord.com/developers/applications)).
 - An **API key for at least one summarizer** — Gemini is the default and has a free tier; or run Ollama locally for zero cloud dependency.
 
-## Installation
+## 🚀 Installation
 
 ### 1. Clone and install Node dependencies
 
@@ -127,7 +134,7 @@ In the Developer Portal → **OAuth2 → URL Generator**, select scopes `bot` an
 
 > **No privileged intents required.** The bot runs on the standard `Guilds` and `GuildVoiceStates` intents only — you do **not** need to enable Server Members or Message Content.
 
-## Running
+## ▶️ Running
 
 The bot needs **two processes** running together.
 
@@ -151,7 +158,7 @@ pm2 start "npm start"       --name meeting-bot
 pm2 save
 ```
 
-## Commands
+## 💬 Commands
 
 | Command | Description |
 |---------|-------------|
@@ -164,7 +171,7 @@ pm2 save
 
 **Auto join/leave:** the bot joins automatically when more than one human is in a voice channel and leaves when one or zero remain. Toggle with `/setup autojoin`.
 
-## Configuration
+## 🎛️ Configuration
 
 `/setup` (requires the **Manage Server** permission) writes per-guild config, applied without a restart.
 
@@ -178,7 +185,7 @@ pm2 save
 | `autojoin` | Auto-join when 2+ people are in voice |
 | `language` | Transcription language code, or `auto` |
 
-## Supported summarizers
+## 🧠 Supported summarizers
 
 - **gemini** *(default)* — Gemini 2.5 Flash, free tier available. Set `GEMINI_API_KEY`.
 - **openai** — any OpenAI-compatible endpoint. Set `OPENAI_API_KEY` (and `OPENAI_BASE_URL` for third-party gateways).
@@ -186,18 +193,19 @@ pm2 save
 
 All providers return the same structured-notes shape, so output is consistent regardless of which you pick.
 
-## Privacy & consent
+## 🔒 Privacy & consent
 
 - The bot shows `[REC]` in its nickname whenever a recording is active, so every member can see it.
 - Audio is transcribed **on the machine running the bot**. No audio is uploaded anywhere; only the final transcript text is sent to your chosen summarizer (and nothing leaves your network at all with Ollama).
 - Recording people's voices is subject to consent laws that vary by jurisdiction (some require all-party consent). **You are responsible for obtaining consent from all participants.**
 
-## Development
+## 🛠️ Development
 
 ```bash
 npm test                                                        # all Node unit tests (node --test)
 node --test test/<name>.test.js                                 # a single test file
 cd stt_sidecar && .venv/bin/python -m pytest test_server.py -q  # sidecar tests
+npm run make:art                                                # regenerate the README brand art (assets/)
 ```
 
 **Project layout:**
@@ -213,13 +221,16 @@ src/
   commands/                  # slash command definitions + /setup validation
   index.js                   # entrypoint: events, wiring, boot recovery
 stt_sidecar/                 # Python FastAPI faster-whisper sidecar
+scripts/make-brand-art.mjs   # generates assets/{banner,logo,icon} from SVG
 test/                        # node --test suites
 docs/superpowers/            # design spec + implementation plan
 ```
 
 **Tech stack:** Node 22.5+ (ESM, `node:sqlite`, native `fetch`, `node --test`), [discord.js](https://discord.js.org) v14, `@discordjs/voice`, `prism-media`, `ffmpeg-static`, `@google/generative-ai`; Python + FastAPI + [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
 
-## Contributing
+The marketing site lives in a separate repo, [`parley`](https://github.com/SakethKanchi/parley) (Astro + Tailwind + GSAP).
+
+## 🤝 Contributing
 
 Contributions are welcome.
 
@@ -230,6 +241,6 @@ Contributions are welcome.
 
 For bugs and feature requests, please open an issue.
 
-## License
+## 📄 License
 
 [ISC](./LICENSE) © Saketh Kanchi

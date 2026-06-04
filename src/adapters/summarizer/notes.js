@@ -6,10 +6,10 @@ export function normalizeNotes(obj = {}) {
   const base = emptyNotes();
   return {
     tldr: typeof obj.tldr === 'string' ? obj.tldr : base.tldr,
-    topics: Array.isArray(obj.topics) ? obj.topics : base.topics,
-    decisions: Array.isArray(obj.decisions) ? obj.decisions : base.decisions,
-    openQuestions: Array.isArray(obj.openQuestions) ? obj.openQuestions : base.openQuestions,
-    actionItems: Array.isArray(obj.actionItems) ? obj.actionItems : base.actionItems,
+    topics: Array.isArray(obj.topics) ? [...obj.topics] : base.topics,
+    decisions: Array.isArray(obj.decisions) ? [...obj.decisions] : base.decisions,
+    openQuestions: Array.isArray(obj.openQuestions) ? [...obj.openQuestions] : base.openQuestions,
+    actionItems: Array.isArray(obj.actionItems) ? [...obj.actionItems] : base.actionItems,
   };
 }
 

@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { normalizeNotes, SUMMARY_PROMPT } from './notes.js';
 import { config } from '../../config/env.js';
 
-export function parseGeminiNotes(raw) {
+export function parseGeminiNotes(raw = '') {
   const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fence ? fence[1] : raw;
   try {

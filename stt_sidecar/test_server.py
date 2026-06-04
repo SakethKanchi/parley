@@ -23,6 +23,7 @@ def test_health():
 
 def test_transcribe_returns_text(monkeypatch):
     _state["model"] = FakeModel()
+    _state["model_name"] = "small"  # match the default so get_model() reuses the fake, never builds a real model
     client = TestClient(app)
     wav = make_silent_wav()
     r = client.post("/transcribe", files={"file": ("a.wav", wav, "audio/wav")})

@@ -17,9 +17,7 @@ def health():
 
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...), model: str = Form("small"), language: str = Form("auto")):
-    if _state["model"] is None:
-        get_model(model)
-    m = _state["model"]
+    m = get_model(model)  # warm: rebuilds only when the requested model name changes
     suffix = os.path.splitext(file.filename or "a.wav")[1] or ".wav"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(await file.read())

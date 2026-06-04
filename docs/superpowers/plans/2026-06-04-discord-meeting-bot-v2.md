@@ -6,7 +6,9 @@
 
 **Architecture:** Node (discord.js, ESM) handles Discord + orchestration; a persistent Python FastAPI sidecar runs faster-whisper with the model loaded once. Per-user Discord audio streams give free speaker attribution. A pluggable summarizer adapter (Gemini default, Ollama/OpenAI swap) returns a fixed `StructuredNotes` shape consumed by storage + delivery.
 
-**Tech Stack:** Node 18+ (ESM, native `fetch`, `node --test`), discord.js v14, `@discordjs/voice`, `prism-media`, `ffmpeg-static`, `better-sqlite3`, `@google/generative-ai`; Python 3.10+, FastAPI, uvicorn, faster-whisper, pytest.
+**Tech Stack:** Node **22.5+** (ESM, native `fetch`, `node --test`, built-in `node:sqlite` with FTS5 — no native compile), discord.js v14, `@discordjs/voice`, `prism-media`, `ffmpeg-static`, `@google/generative-ai`; Python 3.10+, FastAPI, uvicorn, faster-whisper, pytest.
+
+> **Storage note:** Uses Node's built-in `node:sqlite` (`DatabaseSync`), not `better-sqlite3`. The API is nearly identical (`prepare`/`run`/`get`/`all`, `@name` named params with bare object keys, `lastInsertRowid`), but there is no `.pragma()` helper — use `db.exec("PRAGMA ...")`. This avoids a native build and works on Node 22.5+ (verified on 26.x, FTS5 included). Requires `node --test` / `node src/index.js` on Node 22.5+.
 
 ---
 
@@ -49,11 +51,11 @@ git checkout -b feat/v2-rewrite
     "sidecar": "python stt_sidecar/server.py"
   },
   "license": "ISC",
+  "engines": { "node": ">=22.5.0" },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.19.0",
     "@google/generative-ai": "^0.24.1",
-    "better-sqlite3": "^11.8.0",
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.3",
     "ffmpeg-static": "^5.2.0",
@@ -62,6 +64,8 @@ git checkout -b feat/v2-rewrite
   }
 }
 ```
+
+Storage uses the built-in `node:sqlite` module (no `better-sqlite3` dependency, no native compile).
 
 - [ ] **Step 3: Create `.env.example`**
 
@@ -278,7 +282,7 @@ Expected: FAIL — cannot find module `../src/store/db.js`.
 
 ```js
 // src/store/db.js
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meetings (
@@ -315,8 +319,8 @@ CREATE TABLE IF NOT EXISTS guild_config (
 `;
 
 export function openDb(path) {
-  const sql = new Database(path);
-  sql.pragma('journal_mode = WAL');
+  const sql = new DatabaseSync(path);
+  sql.exec('PRAGMA journal_mode = WAL');
   sql.exec(SCHEMA);
 
   return {
@@ -354,13 +358,16 @@ export function openDb(path) {
       return sql.prepare(`SELECT * FROM utterances WHERE meeting_id = ? ORDER BY start_ms`).all(meetingId);
     },
     searchUtterances(guildId, keyword) {
+      // Bind the user input as a quoted FTS5 phrase literal so operator chars
+      // (OR, parentheses, etc.) never throw an fts5 syntax error from a /search typo.
+      const safe = `"${String(keyword).replace(/"/g, '""')}"`;
       return sql.prepare(
         `SELECT u.* FROM utterances_fts f
          JOIN utterances u ON u.id = f.rowid
          JOIN meetings m ON m.id = u.meeting_id
          WHERE m.guild_id = ? AND utterances_fts MATCH ?
          ORDER BY u.meeting_id DESC LIMIT 50`
-      ).all(guildId, keyword);
+      ).all(guildId, safe);
     },
     saveSummary(meetingId, notes, talktime, modelUsed, createdAt = new Date().toISOString()) {
       sql.prepare(
@@ -371,7 +378,8 @@ export function openDb(path) {
     getSummary(meetingId) {
       const row = sql.prepare(`SELECT * FROM summaries WHERE meeting_id = ?`).get(meetingId);
       if (!row) return null;
-      return { ...row, notes: JSON.parse(row.notes_json), talktime: JSON.parse(row.talktime_json) };
+      const { notes_json, talktime_json, ...rest } = row;
+      return { ...rest, notes: JSON.parse(notes_json), talktime: JSON.parse(talktime_json) };
     },
   };
 }
@@ -478,7 +486,10 @@ export function getGuildConfig(db, guildId) {
 
 export function setGuildConfig(db, guildId, patch) {
   const current = getGuildConfig(db, guildId);
-  const merged = { ...current, ...patch };
+  // Drop undefined keys (node:sqlite cannot bind undefined) and pin guildId so a
+  // stray patch key can't corrupt the row identity or the returned object.
+  const safePatch = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  const merged = { ...current, ...safePatch, guildId };
   db.sql.prepare(
     `INSERT OR REPLACE INTO guild_config
        (guild_id, summarizer_provider, summarizer_model, whisper_model, notes_channel_id, use_thread, auto_join, language)
@@ -560,6 +571,7 @@ def test_health():
 
 def test_transcribe_returns_text(monkeypatch):
     _state["model"] = FakeModel()
+    _state["model_name"] = "small"  # match the default so get_model() reuses the fake, never builds a real model
     client = TestClient(app)
     wav = make_silent_wav()
     r = client.post("/transcribe", files={"file": ("a.wav", wav, "audio/wav")})
@@ -596,9 +608,7 @@ def health():
 
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...), model: str = Form("small"), language: str = Form("auto")):
-    if _state["model"] is None:
-        get_model(model)
-    m = _state["model"]
+    m = get_model(model)  # warm: rebuilds only when the requested model name changes
     suffix = os.path.splitext(file.filename or "a.wav")[1] or ".wav"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(await file.read())
@@ -615,7 +625,10 @@ async def transcribe(file: UploadFile = File(...), model: str = Form("small"), l
                 "words": words,
                 "language": getattr(info, "language", language)}
     finally:
-        os.unlink(path)
+        try:
+            os.unlink(path)
+        except OSError:
+            pass  # cleanup failure must not mask a transcription error
 
 if __name__ == "__main__":
     import uvicorn
@@ -701,6 +714,10 @@ export async function transcribeFile(filePath, opts = {}, deps = {}) {
   const fetchImpl = deps.fetchImpl || fetch;
   const readFile = deps.readFile || fsReadFile;
   const retries = deps.retries ?? 1;
+  // Generous: one call transcribes a whole speaking turn, which on CPU can take
+  // minutes for the larger models. This only fires on a stalled (silent) sidecar;
+  // a dead one fails fast with ECONNREFUSED. Tunable via deps.timeoutMs.
+  const timeoutMs = deps.timeoutMs ?? 600_000;
 
   const bytes = await readFile(filePath);
   let lastErr;
@@ -710,7 +727,10 @@ export async function transcribeFile(filePath, opts = {}, deps = {}) {
       form.append('file', new Blob([bytes]), basename(filePath));
       form.append('model', opts.model || 'small');
       form.append('language', opts.language || 'auto');
-      const res = await fetchImpl(`${baseUrl}/transcribe`, { method: 'POST', body: form });
+      const res = await fetchImpl(`${baseUrl}/transcribe`, {
+        method: 'POST', body: form, signal: AbortSignal.timeout(timeoutMs),
+      });
+      // A non-OK HTTP status throws here and is caught below, so it is retried too.
       if (!res.ok) throw new Error(`STT sidecar HTTP ${res.status}`);
       return await res.json();
     } catch (err) {
@@ -905,10 +925,11 @@ export function normalizeNotes(obj = {}) {
   const base = emptyNotes();
   return {
     tldr: typeof obj.tldr === 'string' ? obj.tldr : base.tldr,
-    topics: Array.isArray(obj.topics) ? obj.topics : base.topics,
-    decisions: Array.isArray(obj.decisions) ? obj.decisions : base.decisions,
-    openQuestions: Array.isArray(obj.openQuestions) ? obj.openQuestions : base.openQuestions,
-    actionItems: Array.isArray(obj.actionItems) ? obj.actionItems : base.actionItems,
+    // shallow-copy arrays so the normalized result never shares references with the input
+    topics: Array.isArray(obj.topics) ? [...obj.topics] : base.topics,
+    decisions: Array.isArray(obj.decisions) ? [...obj.decisions] : base.decisions,
+    openQuestions: Array.isArray(obj.openQuestions) ? [...obj.openQuestions] : base.openQuestions,
+    actionItems: Array.isArray(obj.actionItems) ? [...obj.actionItems] : base.actionItems,
   };
 }
 
@@ -954,7 +975,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { normalizeNotes, SUMMARY_PROMPT } from './notes.js';
 import { config } from '../../config/env.js';
 
-export function parseGeminiNotes(raw) {
+export function parseGeminiNotes(raw = '') {
   const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fence ? fence[1] : raw;
   try {
@@ -1261,15 +1282,21 @@ export function chunk(text, limit = 1900) {
   if (text.length <= limit) return [text];
   const out = [];
   let cur = '';
-  for (const line of text.split('\n')) {
-    if (cur.length + line.length + 1 > limit) {
-      if (cur) out.push(cur);
-      cur = line;
-    } else {
-      cur = cur ? `${cur}\n${line}` : line;
+  const pushCur = () => { if (cur) { out.push(cur); cur = ''; } };
+  for (const rawLine of text.split('\n')) {
+    // Hard-split any single line longer than the limit (e.g. a degraded LLM
+    // response dumped into tldr) so no emitted chunk can exceed Discord's cap.
+    const segments = rawLine.length > limit ? rawLine.match(new RegExp(`.{1,${limit}}`, 'g')) : [rawLine];
+    for (const line of segments) {
+      if (cur.length + line.length + 1 > limit) {
+        pushCur();
+        cur = line;
+      } else {
+        cur = cur ? `${cur}\n${line}` : line;
+      }
     }
   }
-  if (cur) out.push(cur);
+  pushCur();
   return out;
 }
 ```
@@ -1719,9 +1746,7 @@ Expected: FAIL — cannot find module.
 
 ```js
 // src/voice/capture.js
-import { createWriteStream } from 'node:fs';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { createWriteStream, mkdirSync } from 'node:fs';
 import prism from 'prism-media';
 import { EndBehaviorType } from '@discordjs/voice';
 import { pcmName } from './audio.js';
@@ -1754,20 +1779,39 @@ export function attachCapture({ connection, guild, audioDir, registry, now = () 
 
     const startMs = now();
     const pcmPath = `${audioDir}/${pcmName(userId, startMs)}`;
-    mkdirSync(dirname(pcmPath), { recursive: true });
 
     const opusStream = connection.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 } });
     const decoder = new prism.opus.Decoder({ rate: 16000, channels: 1, frameSize: 320 });
     const out = createWriteStream(pcmPath);
     opusStream.pipe(decoder).pipe(out);
 
-    registry.begin(userId, member.displayName, startMs, pcmPath, { opusStream, decoder, out });
+    const end = () => {
+      try { out.end(); } catch { /* ignore */ }
+      try { decoder.destroy(); } catch { /* ignore */ }
+      try { opusStream.destroy(); } catch { /* ignore */ }
+      registry.finish(userId);
+    };
 
-    const end = () => { try { out.end(); } catch { /* ignore */ } try { opusStream.destroy(); } catch { /* ignore */ } registry.finish(userId); };
+    registry.begin(userId, member.displayName, startMs, pcmPath, { opusStream, decoder, out, end });
+
     opusStream.on('end', end);
     opusStream.on('error', end);
     decoder.on('error', end);
   });
+
+  return {
+    // End every still-active speaking turn and wait for its PCM to flush, so a
+    // manual /leave or auto-leave never loses the final in-flight utterance.
+    async stopAll() {
+      const actives = [...registry.active.values()];
+      await Promise.all(actives.map((t) => new Promise((resolve) => {
+        if (t.out.writableFinished) { resolve(); return; }
+        t.out.once('finish', resolve);
+        t.out.once('close', resolve);
+        t.end();
+      })));
+    },
+  };
 }
 ```
 
@@ -1877,8 +1921,8 @@ export class MeetingManager {
     for (const a of attendees || []) this.db.addAttendee(meetingId, a.id, a.displayName);
 
     const audioDir = `${this.audioRoot}/${meetingId}`;
-    const { registry } = this.startCapture({ meetingId, connection, guild, audioDir });
-    this.active.set(k, { meetingId, connection, guild, registry, audioDir });
+    const { registry, stopAll } = this.startCapture({ meetingId, connection, guild, audioDir });
+    this.active.set(k, { meetingId, connection, guild, registry, stopAll, audioDir });
     return meetingId;
   }
 
@@ -1887,6 +1931,7 @@ export class MeetingManager {
     const session = this.active.get(k);
     if (!session) return null;
     this.active.delete(k);
+    if (session.stopAll) await session.stopAll();  // flush in-flight speaking turns before harvesting tracks
     const tracks = session.registry.list();
     await this.finalize(session.meetingId, tracks, session);
     return session.meetingId;
@@ -2147,7 +2192,11 @@ export async function postNotes({ client, meeting, cfg, notes, talktime }) {
 
   let target = channel;
   if (cfg.useThread && channel.type === ChannelType.GuildText) {
-    target = await channel.threads.create({ name: `Notes — ${meeting.channel_name} ${meeting.started_at.slice(0, 10)}` });
+    // Fall back to the channel itself if thread creation fails (e.g. missing perms)
+    // so the notes are never silently lost.
+    target = await channel.threads
+      .create({ name: `Notes — ${meeting.channel_name} ${meeting.started_at.slice(0, 10)}` })
+      .catch(() => channel);
   }
   for (const part of parts) await target.send(part);
 }
@@ -2160,6 +2209,7 @@ export async function postNotes({ client, meeting, cfg, notes, talktime }) {
 import { Client, GatewayIntentBits, ChannelType } from 'discord.js';
 import { joinVoiceChannel, getVoiceConnection, entersState, VoiceConnectionStatus } from '@discordjs/voice';
 import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
 import { config, validateEnv } from './config/env.js';
 import { openDb } from './store/db.js';
 import { getGuildConfig, setGuildConfig } from './store/config.js';
@@ -2178,15 +2228,19 @@ const db = openDb(join(config.dataDir, 'meetings.db'));
 const audioRoot = join(config.dataDir, 'audio');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  // Minimal set: Guilds (slash commands + channel cache), GuildVoiceStates
+  // (voiceStateUpdate + channel.members). No messageCreate handler, so the
+  // privileged MessageContent intent is deliberately NOT requested (requesting
+  // it unenabled fails login with 4014).
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
 const manager = new MeetingManager({
   db, audioRoot,
   startCapture: ({ meetingId, connection, guild, audioDir }) => {
     const registry = new TrackRegistry();
-    attachCapture({ connection, guild, audioDir, registry });
-    return { registry };
+    const { stopAll } = attachCapture({ connection, guild, audioDir, registry });
+    return { registry, stopAll };
   },
   finalize: async (meetingId, tracks, session) => {
     const meeting = db.getMeeting(meetingId);
@@ -2198,6 +2252,8 @@ const manager = new MeetingManager({
         summarizer: getSummarizer(cfg),
         deliver: async (notes, talktime) => postNotes({ client, meeting, cfg, notes, talktime }),
       });
+      // Success: delete the meeting's audio. On failure we keep the PCM for manual retry.
+      await rm(session.audioDir, { recursive: true, force: true }).catch(() => {});
     } catch (err) {
       console.error(`Meeting ${meetingId} failed:`, err.message);
       const ch = await client.channels.fetch(cfg.notesChannelId || meeting.channel_id).catch(() => null);
@@ -2218,6 +2274,9 @@ async function joinAndStart(channel) {
     adapterCreator: channel.guild.voiceAdapterCreator, selfDeaf: false, selfMute: true,
   });
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+  // A concurrent voiceStateUpdate may have started recording this channel while
+  // we awaited the connection — bail and drop the redundant connection.
+  if (manager.isActive(channel.guild.id, channel.id)) { connection.destroy(); return; }
   const attendees = channel.members.filter((m) => !m.user.bot).map((m) => ({ id: m.id, displayName: m.displayName }));
   manager.start({ guildId: channel.guild.id, channelId: channel.id, channelName: channel.name, connection, guild: channel.guild, attendees });
   setRecIndicator(channel.guild, true);
@@ -2262,6 +2321,7 @@ client.on('interactionCreate', async (interaction) => {
     if (commandName === 'join') {
       const vc = member.voice?.channel;
       if (!vc) return interaction.reply({ content: '❌ Join a voice channel first.', ephemeral: true });
+      if (manager.isActive(guild.id, vc.id)) return interaction.reply({ content: '✅ Already recording this channel.', ephemeral: true });
       await interaction.deferReply({ ephemeral: true });
       await joinAndStart(vc);
       return interaction.editReply('✅ Recording started.');

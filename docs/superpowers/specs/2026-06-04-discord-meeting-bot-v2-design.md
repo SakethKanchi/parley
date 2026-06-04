@@ -48,7 +48,10 @@ post-processing, not a live bot.
   model size, notes channel, thread on/off, auto-join toggle, language. Persisted
   per-guild in SQLite, applied without restart.
 - Minimal **`[REC]` recording indicator** in the bot's nickname while recording.
-- Crash recovery: orphaned in-progress meetings are processed on boot.
+- Crash recovery: orphaned in-progress meetings (status `recording`/`processing`)
+  are marked `transcription_failed` on boot. Their transcript/summary is not
+  auto-reprocessed — PCM from a process that died mid-capture is unreliable to
+  resume; the operator can re-run a meeting manually if needed.
 
 ### Out of scope
 
@@ -212,9 +215,12 @@ threads on, auto-join on, language `auto`.
 | `/search <keyword>` | anyone | FTS over utterances; return matching meetings + snippets |
 | `/setup ...` | admin (Manage Guild) | Read/update `guild_config` (provider, model, whisper size, notes channel, thread, auto-join, language) |
 
-Both legacy text triggers (`!join`/`!leave`) and slash commands route to the same
-manager methods. Auto-join/auto-leave in `voiceStateUpdate` and on-boot recovery
-also route to the same methods (no duplicated lifecycle logic).
+Slash commands are the only command surface. Legacy `!join`/`!leave` text triggers
+are intentionally NOT implemented: reading message content requires the privileged
+`MessageContent` gateway intent, which adds setup friction and a login-failure mode
+for self-hosters. Auto-join/auto-leave in `voiceStateUpdate` and the manual `/join`,
+`/leave` handlers all route to the same `MeetingManager` methods (no duplicated
+lifecycle logic). The bot requests the minimal intents `[Guilds, GuildVoiceStates]`.
 
 ## 8. Configuration & secrets
 
@@ -242,8 +248,10 @@ also route to the same methods (no duplicated lifecycle logic).
   failing, store the transcript and mark `summary_failed`, post "transcript saved,
   summary pending" — never lose the meeting.
 - **Crash mid-meeting:** on boot, find `status IN ('recording','processing')`
-  meetings with orphaned audio and run them through the orchestrator (replaces the
-  ad-hoc `process_existing.js`).
+  meetings and mark them `transcription_failed` (does not auto-reprocess —
+  mid-capture PCM is unreliable). Replaces the ad-hoc `process_existing.js`.
+- **Audio retention:** on successful delivery the meeting's `audio/<id>/` PCM is
+  deleted; on any failure path the PCM is kept for manual retry.
 - **ffmpeg/STT errors:** always logged with the meeting id; never silent.
 - **Bad `/setup` value:** validated, rejected with an ephemeral error; config
   unchanged.

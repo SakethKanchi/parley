@@ -50,3 +50,12 @@ vosk-model*/
 logs/
 *.log
 
+# v2
+data/
+audio/
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+.venv/
+

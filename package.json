@@ -1,28 +1,18 @@
 {
-  "name": "discord-voice-recording-bot",
-  "version": "1.0.0",
-  "description": "A Discord bot that automatically records voice conversations, transcribes them using Vosk, and generates AI-powered summaries stored in Google Drive",
-  "main": "index.js",
+  "name": "discord-meeting-bot",
+  "version": "2.0.0",
+  "description": "Self-hosted Discord bot: records meetings, transcribes per-speaker, posts AI meeting notes.",
+  "type": "module",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node bot.js",
-    "process": "node processor.js",
-    "upload": "node uploader.js",
-    "upload-watch": "node uploader.js --watch",
-    "cleanup": "node cleanup.js"
+    "start": "node src/index.js",
+    "test": "node --test",
+    "sidecar": "python stt_sidecar/server.py"
   },
-  "keywords": [
-    "discord",
-    "bot",
-    "voice-recording",
-    "speech-recognition",
-    "transcription",
-    "ai",
-    "meeting-notes",
-    "google-drive"
-  ],
-  "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.19.0",
@@ -30,9 +20,7 @@
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.3",
     "ffmpeg-static": "^5.2.0",
-    "googleapis": "^161.0.0",
     "libsodium-wrappers": "^0.7.15",
-    "mime-types": "^3.0.1",
     "prism-media": "^1.3.5"
   }
 }

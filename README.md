@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://sakethkanchi.github.io/parley/"><b>🌐 Website</b></a> ·
+  <a href="https://sakethkanchi.github.io/parley-landing/"><b>🌐 Website</b></a> ·
   <a href="#-installation"><b>🚀 Install</b></a> ·
   <a href="#-commands"><b>💬 Commands</b></a> ·
   <a href="#-privacy--consent"><b>🔒 Privacy</b></a>
@@ -87,8 +87,8 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 ### 1. Clone and install Node dependencies
 
 ```bash
-git clone https://github.com/SakethKanchi/Discord_Meeting_Bot.git
-cd Discord_Meeting_Bot
+git clone https://github.com/SakethKanchi/parley.git
+cd parley
 npm install
 ```
 
@@ -228,7 +228,7 @@ docs/superpowers/            # design spec + implementation plan
 
 **Tech stack:** Node 22.5+ (ESM, `node:sqlite`, native `fetch`, `node --test`), [discord.js](https://discord.js.org) v14, `@discordjs/voice`, `prism-media`, `ffmpeg-static`, `@google/generative-ai`; Python + FastAPI + [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
 
-The marketing site lives in a separate repo, [`parley`](https://github.com/SakethKanchi/parley) (Astro + Tailwind + GSAP).
+The marketing site lives in a separate repo, [`parley-landing`](https://github.com/SakethKanchi/parley-landing) (Astro + Tailwind + GSAP).
 
 ## 🤝 Contributing
 

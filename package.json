@@ -1,5 +1,5 @@
 {
-  "name": "discord-meeting-bot",
+  "name": "parley",
   "version": "2.0.0",
   "description": "Self-hosted Discord bot: records meetings, transcribes per-speaker, posts AI meeting notes.",
   "type": "module",

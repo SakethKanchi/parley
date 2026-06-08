@@ -203,15 +203,15 @@ guild_config(
 Defaults applied when a guild has no `guild_config` row: provider `gemini`, a
 current Gemini Flash model, whisper `small`, notes in the meeting channel,
 threads on, auto-join on, language `auto`.
-
 ## 7. Slash commands
-
 | Command | Who | Effect |
 |---------|-----|--------|
 | `/join` | member in a voice channel | Bot joins + starts recording (respects auto-join-independent manual start) |
 | `/leave` | member | Stop recording, finalize, process |
+| `/status` | anyone | Show active recording + recent meetings |
 | `/summary [meeting]` | anyone | Post the stored notes for a meeting (default: most recent) |
 | `/history` | anyone | List recent meetings (id, channel, date, status) |
+| `/raw [meeting]` | anyone | Dump raw meeting JSON: metadata, attendees, utterances, summary |
 | `/search <keyword>` | anyone | FTS over utterances; return matching meetings + snippets |
 | `/setup ...` | admin (Manage Guild) | Read/update `guild_config` (provider, model, whisper size, notes channel, thread, auto-join, language) |
 

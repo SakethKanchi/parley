@@ -48,7 +48,7 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 - **Pluggable summarizer.** Google Gemini (default, free tier), any OpenAI-compatible endpoint, or fully-offline Ollama — switch per-server with `/setup`, no restart.
 - **Local speech-to-text.** A warm [faster-whisper](https://github.com/SYSTRAN/faster-whisper) sidecar; pick model size from `tiny` to `large-v3-turbo`.
 - **Runs anywhere.** Node's built-in `node:sqlite` (no native build) — works on a Raspberry Pi or a GPU server; only a config value changes.
-- **Searchable history.** `/history`, `/summary`, and full-text `/search` over every past meeting, backed by SQLite FTS5.
+- **Searchable history.** `/history`, `/summary`, `/raw`, and full-text `/search` over every past meeting, backed by SQLite FTS5.
 - **Auto join/leave.** Joins when 2+ people are talking, leaves when the room empties. Shows `[REC]` in its nickname while recording.
 - **Concurrent meetings.** Records multiple channels/servers at once — no global single-recording limit.
 
@@ -144,11 +144,15 @@ The bot needs **two processes** running together.
 npm run sidecar
 ```
 
+> The sidecar runs inside its own Python virtualenv at `stt_sidecar/.venv`. The `npm run sidecar` script uses that interpreter automatically.
+
 **Terminal 2 — Discord bot:**
 
 ```bash
 npm start
 ```
+
+> `npm start` loads `.env` automatically via Node's `--env-file` flag (Node 20+). If your shell already has empty `DISCORD_TOKEN=` etc., the `.env` values win.
 
 For production, keep both alive with a process manager:
 
@@ -164,8 +168,10 @@ pm2 save
 |---------|-------------|
 | `/join` | Join your current voice channel and start recording |
 | `/leave` | Stop recording, post notes, and leave |
+| `/status` | Check if the bot is recording, plus recent meetings |
 | `/summary [meeting]` | Post the notes for a meeting (default: most recent) |
 | `/history` | List recent meetings with status |
+| `/raw [meeting]` | Dump raw meeting data: metadata, attendees, utterances, summary |
 | `/search <keyword>` | Full-text search across all meeting transcripts |
 | `/setup` | Configure the bot for this server (admin only) |
 
@@ -212,6 +218,7 @@ npm run make:art                                                # regenerate the
 
 ```
 src/
+  index.js                   # entrypoint: events, wiring, boot recovery
   config/env.js              # env + DATA_DIR (single source of truth)
   voice/                     # capture, meeting-manager, audio, decisions
   pipeline/                  # transcribe, summarize, orchestrator
@@ -219,7 +226,6 @@ src/
   store/                     # db (node:sqlite + FTS5), per-guild config
   delivery/                  # notes rendering + Discord posting
   commands/                  # slash command definitions + /setup validation
-  index.js                   # entrypoint: events, wiring, boot recovery
 stt_sidecar/                 # Python FastAPI faster-whisper sidecar
 scripts/make-brand-art.mjs   # generates assets/{banner,logo,icon} from SVG
 test/                        # node --test suites

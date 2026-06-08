@@ -46,9 +46,9 @@ git checkout -b feat/v2-rewrite
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "test": "node --test",
-    "sidecar": "python stt_sidecar/server.py"
+    "start": "node --env-file=.env src/index.js",
+    "test": "node --env-file=.env --test",
+    "sidecar": "stt_sidecar/.venv/bin/python stt_sidecar/server.py"
   },
   "license": "ISC",
   "engines": { "node": ">=22.5.0" },
@@ -165,22 +165,19 @@ Expected: FAIL — cannot find module `../src/config/env.js`.
 ```js
 // src/config/env.js
 import { existsSync } from 'node:fs';
-import 'dotenv/config';
-
+import dotenv from 'dotenv';
+dotenv.config({ override: true }); // .env wins even if shell has empty vars
 const REQUIRED = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID'];
-
 export function resolveDataDir(env = process.env, exists = existsSync, cwd = process.cwd()) {
   if (env.DATA_DIR) return env.DATA_DIR;
   if (exists('/data')) return '/data';
   return cwd;
 }
-
 export function validateEnv(env = process.env) {
-  const missing = REQUIRED.filter((k) => !env[k]);
-  if (missing.length) throw new Error(`Missing required env: ${missing.join(', ')}`);
+  const empty = REQUIRED.filter((k) => !env[k] || env[k].trim() === '');
+  if (empty.length) throw new Error(`Missing or empty required env: ${empty.join(', ')}`);
   return true;
 }
-
 export const config = {
   dataDir: resolveDataDir(),
   discordToken: process.env.DISCORD_TOKEN,
@@ -598,7 +595,7 @@ _state = {"model": None, "model_name": None}
 
 def get_model(name: str):
     if _state["model"] is None or _state["model_name"] != name:
-        _state["model"] = WhisperModel(name, device="auto", compute_type="int8")
+        _state["model"] = WhisperModel(name, device="cpu", compute_type="int8")
         _state["model_name"] = name
     return _state["model"]
 
@@ -2081,9 +2078,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { commandsJSON } from '../src/commands/definitions.js';
 
-test('exports the six v1 commands as JSON', () => {
+test('exports the eight v1 commands as JSON', () => {
   const names = commandsJSON().map((c) => c.name).sort();
-  assert.deepEqual(names, ['history', 'join', 'leave', 'search', 'setup', 'summary']);
+  assert.deepEqual(names, ['history', 'join', 'leave', 'raw', 'search', 'setup', 'status', 'summary']);
 });
 
 test('search command has a required keyword option', () => {
@@ -2119,6 +2116,9 @@ export function buildCommands() {
     new SlashCommandBuilder().setName('summary').setDescription('Show notes for a meeting')
       .addIntegerOption((o) => o.setName('meeting').setDescription('Meeting id (default: most recent)')),
     new SlashCommandBuilder().setName('history').setDescription('List recent meetings'),
+    new SlashCommandBuilder().setName('status').setDescription('Check bot status and current recording'),
+    new SlashCommandBuilder().setName('raw').setDescription('Dump raw meeting data')
+      .addIntegerOption((o) => o.setName('meeting').setDescription('Meeting id (default: most recent)')),
     new SlashCommandBuilder().setName('search').setDescription('Search past meetings')
       .addStringOption((o) => o.setName('keyword').setDescription('Word or phrase').setRequired(true)),
     new SlashCommandBuilder().setName('setup').setDescription('Configure the bot (admin only)')

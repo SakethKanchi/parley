@@ -9,6 +9,9 @@ export function buildCommands() {
     new SlashCommandBuilder().setName('summary').setDescription('Show notes for a meeting')
       .addIntegerOption((o) => o.setName('meeting').setDescription('Meeting id (default: most recent)')),
     new SlashCommandBuilder().setName('history').setDescription('List recent meetings'),
+    new SlashCommandBuilder().setName('status').setDescription('Check bot status and current recording'),
+    new SlashCommandBuilder().setName('raw').setDescription('Dump raw meeting data')
+      .addIntegerOption((o) => o.setName('meeting').setDescription('Meeting id (default: most recent)')),
     new SlashCommandBuilder().setName('search').setDescription('Search past meetings')
       .addStringOption((o) => o.setName('keyword').setDescription('Word or phrase').setRequired(true)),
     new SlashCommandBuilder().setName('setup').setDescription('Configure the bot (admin only)')

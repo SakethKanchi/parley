@@ -20,11 +20,12 @@ const db = openDb(join(config.dataDir, 'meetings.db'));
 const audioRoot = join(config.dataDir, 'audio');
 
 const client = new Client({
-  // Minimal set: Guilds (slash commands + channel cache), GuildVoiceStates
-  // (voiceStateUpdate + channel.members). No messageCreate handler, so the
-  // privileged MessageContent intent is deliberately NOT requested (requesting
-  // it unenabled fails login with 4014).
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+});
+client.on('raw', (packet) => {
+  if (packet.t === 'VOICE_STATE_UPDATE' || packet.t === 'VOICE_SERVER_UPDATE') {
+    console.log(`[gateway] ${packet.t}:`, JSON.stringify(packet.d).substring(0, 200));
+  }
 });
 
 const manager = new MeetingManager({
@@ -53,27 +54,91 @@ const manager = new MeetingManager({
     }
   },
 });
-
+const joiningInProgress = new Set(); // "guildId:channelId" strings
 function humanCount(channel) {
   return channel.members.filter((m) => !m.user.bot).size;
 }
 function setRecIndicator(guild, on) {
-  guild.members.me?.setNickname(on ? '[REC] Meeting Bot' : null).catch(() => {});
+  guild.members.me?.setNickname(on ? '[REC] Meeting Bot' : null).catch((e) => {
+    console.warn('Nickname change failed:', e.message);
+  });
+}
+function logVoiceStates(connection, label) {
+  connection.on('stateChange', (oldState, newState) => {
+    console.log(`[voice:${label}] ${oldState.status} -> ${newState.status}`);
+    if (newState.status === VoiceConnectionStatus.Disconnected) {
+      console.warn(`[voice:${label}] disconnected — likely missing Connect/Speak permission or network issue`);
+    }
+  });
+  connection.on('error', (err) => {
+    console.error(`[voice:${label}] connection error:`, err.message);
+  });
+  connection.on('debug', (msg) => {
+    console.log(`[voice:${label}] debug:`, msg);
+  });
+}
+function hasVoicePermissions(channel) {
+  const perms = channel.guild.members.me?.permissionsIn(channel);
+  return {
+    connect: perms?.has('Connect') ?? false,
+    speak: perms?.has('Speak') ?? false,
+    useVoiceActivity: perms?.has('UseVAD') ?? false,
+  };
 }
 async function joinAndStart(channel) {
+  const joinKey = `${channel.guild.id}:${channel.id}`;
+  if (joiningInProgress.has(joinKey)) {
+    console.log(`[join] Skipping duplicate join for ${joinKey}`);
+    return;
+  }
+  joiningInProgress.add(joinKey);
+  const permCheck = hasVoicePermissions(channel);
+  if (!permCheck.connect) {
+    joiningInProgress.delete(joinKey);
+    throw new Error('Bot lacks **Connect** permission in this voice channel. Check server roles / channel overrides.');
+  }
+  if (!permCheck.speak) {
+    joiningInProgress.delete(joinKey);
+    throw new Error('Bot lacks **Speak** permission in this voice channel. Check server roles / channel overrides.');
+  }
+  console.log(`[voice] joinVoiceChannel guild=${channel.guild.id} channel=${channel.id}`);
   const connection = joinVoiceChannel({
     channelId: channel.id, guildId: channel.guild.id,
     adapterCreator: channel.guild.voiceAdapterCreator, selfDeaf: false, selfMute: true,
   });
-  await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
-  // A concurrent voiceStateUpdate may have started recording this channel while
-  // we awaited the connection — bail and drop the redundant connection.
-  if (manager.isActive(channel.guild.id, channel.id)) { connection.destroy(); return; }
+  console.log(`[voice] connection initial state: ${connection.state.status}`);
+  connection.on('stateChange', (oldState, newState) => {
+    console.log(`[voice] stateChange: ${oldState.status} -> ${newState.status}`);
+  });
+  connection.on('error', (err) => {
+    console.error(`[voice] connection error:`, err.message);
+  });
+  try {
+    await entersState(connection, VoiceConnectionStatus.Ready, 25_000);
+    console.log(`[voice] connection reached Ready`);
+  } catch (err) {
+    console.error(`[voice] entersState failed after 25s. Final state: ${connection.state.status}`);
+    connection.destroy();
+    joiningInProgress.delete(joinKey);
+    throw new Error(
+      `Voice connection failed: ${err.message}. Final state was ${connection.state.status}. ` +
+      `Common causes: missing Connect/Speak permission, bot role below channel restrictions, ` +
+      `or Discord voice region issues. Try moving the bot role higher in Server Settings → Roles.`
+    );
+  }
+  if (manager.isActive(channel.guild.id, channel.id)) {
+    connection.destroy();
+    joiningInProgress.delete(joinKey);
+    return;
+  }
   const attendees = channel.members.filter((m) => !m.user.bot).map((m) => ({ id: m.id, displayName: m.displayName }));
-  manager.start({ guildId: channel.guild.id, channelId: channel.id, channelName: channel.name, connection, guild: channel.guild, attendees });
+  const meetingId = manager.start({ guildId: channel.guild.id, channelId: channel.id, channelName: channel.name, connection, guild: channel.guild, attendees });
+  joiningInProgress.delete(joinKey);
+  console.log(`[meeting] Started #${meetingId} in ${channel.name} with ${attendees.length} attendee(s)`);
   setRecIndicator(channel.guild, true);
 }
 async function stopAndLeave(guildId, channelId) {
+  console.log(`[meeting] Stopping meeting in guild:${guildId} channel:${channelId}`);
   await manager.stop(guildId, channelId);
   const conn = getVoiceConnection(guildId);
   if (conn && conn.state.status !== VoiceConnectionStatus.Destroyed) conn.destroy();
@@ -97,10 +162,12 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   const cfg = getGuildConfig(db, guild.id);
   const connected = manager.isActive(guild.id, channel.id);
   const count = humanCount(channel);
-
+  console.log(`[vSU] guild=${guild.id} channel=${channel.id} user=${newState.id} old=${oldState.channelId} new=${newState.channelId} humans=${count} connected=${connected} autoJoin=${cfg.autoJoin}`);
   if (shouldAutoJoin({ humanCount: count, autoJoin: cfg.autoJoin, connected })) {
+    console.log(`[vSU] auto-join triggered for ${channel.id}`);
     await joinAndStart(channel).catch((e) => console.error('auto-join failed:', e.message));
   } else if (shouldAutoLeave({ humanCount: count, connected })) {
+    console.log(`[vSU] auto-leave triggered for ${channel.id}`);
     await stopAndLeave(guild.id, channel.id).catch((e) => console.error('auto-leave failed:', e.message));
   }
 });
@@ -139,6 +206,37 @@ client.on('interactionCreate', async (interaction) => {
       const rows = db.listRecent(guild.id, 10);
       const text = rows.length ? rows.map((m) => `#${m.id} • ${m.channel_name} • ${m.started_at} • ${m.status}`).join('\n') : 'No meetings yet.';
       return interaction.reply({ content: text, ephemeral: true });
+    }
+    if (commandName === 'status') {
+      const sessions = [...manager.active.entries()];
+      const activeText = sessions.length
+        ? sessions.map(([k, s]) => `🔴 Recording in <#${s.channelId}> (meeting #${s.meetingId})`).join('\n')
+        : '🟢 Not currently recording.';
+      const recent = db.listRecent(guild.id, 5);
+      const recentText = recent.length
+        ? '\n\n**Recent meetings:**\n' + recent.map((m) => `#${m.id} • ${m.channel_name} • ${m.started_at} • ${m.status}`).join('\n')
+        : '';
+      return interaction.reply({ content: activeText + recentText, ephemeral: true });
+    }
+    if (commandName === 'raw') {
+      const id = interaction.options.getInteger('meeting') ?? db.listRecent(guild.id, 1)[0]?.id;
+      const m = id ? db.getMeeting(id) : null;
+      if (!m) return interaction.reply({ content: '❌ No meeting found.', ephemeral: true });
+      const attendees = db.listAttendees(id);
+      const utterances = db.listUtterances(id);
+      const summary = db.getSummary(id);
+      const payload = {
+        meeting: m,
+        attendees: attendees.map((a) => ({ user_id: a.user_id, display_name: a.display_name })),
+        utteranceCount: utterances.length,
+        utterances: utterances.slice(0, 20).map((u) => ({ speaker: u.display_name, start_ms: u.start_ms, end_ms: u.end_ms, text: u.text })),
+        summary: summary ? { model: summary.model_used, created: summary.created_at } : null,
+      };
+      const json = JSON.stringify(payload, null, 2);
+      const parts = chunk(json, 1900);
+      await interaction.reply({ content: '```json\n' + parts[0] + '\n```', ephemeral: true });
+      for (const p of parts.slice(1)) await interaction.followUp({ content: '```json\n' + p + '\n```', ephemeral: true });
+      return;
     }
     if (commandName === 'search') {
       const kw = interaction.options.getString('keyword');

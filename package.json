@@ -5,9 +5,9 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "test": "node --test",
-    "sidecar": "python stt_sidecar/server.py",
+    "start": "node --env-file=.env src/index.js",
+    "test": "node --env-file=.env --test",
+    "sidecar": "stt_sidecar/.venv/bin/python stt_sidecar/server.py",
     "make:art": "node scripts/make-brand-art.mjs"
   },
   "license": "ISC",
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
-    "@discordjs/voice": "^0.19.0",
+    "@discordjs/voice": "^0.19.2",
     "@google/generative-ai": "^0.24.1",
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.3",

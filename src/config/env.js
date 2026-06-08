@@ -1,17 +1,15 @@
 import { existsSync } from 'node:fs';
-import 'dotenv/config';
-
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 const REQUIRED = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID'];
-
 export function resolveDataDir(env = process.env, exists = existsSync, cwd = process.cwd()) {
   if (env.DATA_DIR) return env.DATA_DIR;
   if (exists('/data')) return '/data';
   return cwd;
 }
-
 export function validateEnv(env = process.env) {
-  const missing = REQUIRED.filter((k) => !env[k]);
-  if (missing.length) throw new Error(`Missing required env: ${missing.join(', ')}`);
+  const empty = REQUIRED.filter((k) => !env[k] || env[k].trim() === '');
+  if (empty.length) throw new Error(`Missing or empty required env: ${empty.join(', ')}`);
   return true;
 }
 

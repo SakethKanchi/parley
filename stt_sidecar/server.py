@@ -7,7 +7,7 @@ _state = {"model": None, "model_name": None}
 
 def get_model(name: str):
     if _state["model"] is None or _state["model_name"] != name:
-        _state["model"] = WhisperModel(name, device="auto", compute_type="int8")
+        _state["model"] = WhisperModel(name, device="cpu", compute_type="int8")
         _state["model_name"] = name
     return _state["model"]
 

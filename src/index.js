@@ -202,6 +202,26 @@ client.on('interactionCreate', async (interaction) => {
       for (const p of parts.slice(1)) await interaction.followUp({ content: p, ephemeral: true });
       return;
     }
+    if (commandName === 'post') {
+      const id = interaction.options.getInteger('meeting') ?? db.listRecent(guild.id, 1)[0]?.id;
+      const s = id ? db.getSummary(id) : null;
+      if (!s) return interaction.reply({ content: '❌ No summary found.', ephemeral: true });
+      const m = db.getMeeting(id);
+      const cfg = getGuildConfig(db, guild.id);
+      const parts = chunk(renderNotes(s.notes, s.talktime, { channelName: m.channel_name, date: m.started_at }));
+      await interaction.deferReply({ ephemeral: true });
+
+      let target = interaction.channel;
+      if (cfg.useThread && interaction.channel?.type === ChannelType.GuildText) {
+        // Fall back to the channel itself if thread creation fails (e.g. missing perms).
+        target = await interaction.channel.threads
+          .create({ name: `Notes — ${m.channel_name} ${m.started_at.slice(0, 10)}` })
+          .catch(() => interaction.channel);
+      }
+      for (const p of parts) await target.send(p);
+      const where = target === interaction.channel ? 'this channel' : `thread <#${target.id}>`;
+      return interaction.editReply(`✅ Posted summary for meeting #${id} in ${where}.`);
+    }
     if (commandName === 'history') {
       const rows = db.listRecent(guild.id, 10);
       const text = rows.length ? rows.map((m) => `#${m.id} • ${m.channel_name} • ${m.started_at} • ${m.status}`).join('\n') : 'No meetings yet.';

@@ -8,6 +8,8 @@ export function buildCommands() {
     new SlashCommandBuilder().setName('leave').setDescription('Stop recording and leave'),
     new SlashCommandBuilder().setName('summary').setDescription('Show notes for a meeting')
       .addIntegerOption((o) => o.setName('meeting').setDescription('Meeting id (default: most recent)')),
+    new SlashCommandBuilder().setName('post').setDescription('Post a meeting summary publicly in this channel')
+      .addIntegerOption((o) => o.setName('meeting').setDescription('Meeting id (default: most recent)')),
     new SlashCommandBuilder().setName('history').setDescription('List recent meetings'),
     new SlashCommandBuilder().setName('status').setDescription('Check bot status and current recording'),
     new SlashCommandBuilder().setName('raw').setDescription('Dump raw meeting data')

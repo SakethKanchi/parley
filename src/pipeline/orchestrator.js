@@ -1,6 +1,7 @@
 import { transcribeTracks } from './transcribe.js';
 import { buildTranscript, computeTalkTime } from './summarize.js';
 import { getSummarizer } from '../adapters/summarizer/index.js';
+import { describeSummarizerError } from '../adapters/summarizer/errors.js';
 
 export async function processMeeting(db, meetingId, opts) {
   const meeting = db.getMeeting(meetingId);
@@ -14,6 +15,7 @@ export async function processMeeting(db, meetingId, opts) {
     utterances = await transcribe(opts.tracks, opts.cfg);
   } catch (err) {
     db.setMeetingStatus(meetingId, 'transcription_failed');
+    err.userMessage = `Transcription failed — the STT sidecar may be down or unreachable. (${err.message})`;
     throw err;
   }
   for (const u of utterances) db.addUtterance({ meetingId, ...u });
@@ -28,6 +30,7 @@ export async function processMeeting(db, meetingId, opts) {
     notes = await summarizer.summarize(transcript, meta);
   } catch (err) {
     db.setMeetingStatus(meetingId, 'summary_failed');
+    err.userMessage = describeSummarizerError(err, opts.cfg.summarizerProvider);
     throw err;
   }
 

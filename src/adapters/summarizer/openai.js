@@ -1,5 +1,6 @@
 import { parseGeminiNotes } from './gemini.js';
 import { SUMMARY_PROMPT } from './notes.js';
+import { httpError, withRetry } from './errors.js';
 import { config } from '../../config/env.js';
 
 export class OpenAISummarizer {
@@ -9,13 +10,15 @@ export class OpenAISummarizer {
   }
   async summarize(transcript, meta) {
     const prompt = `${SUMMARY_PROMPT}\n\nAttendees: ${(meta.attendees || []).join(', ')}\n\nTranscript:\n${transcript}`;
-    const res = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ model: this.model, messages: [{ role: 'user', content: prompt }] }),
+    const body = await withRetry(async () => {
+      const res = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
+        body: JSON.stringify({ model: this.model, messages: [{ role: 'user', content: prompt }] }),
+      });
+      if (!res.ok) throw httpError('OpenAI', res.status, await res.text().catch(() => ''));
+      return res.json();
     });
-    if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}`);
-    const body = await res.json();
     return parseGeminiNotes(body.choices?.[0]?.message?.content ?? '');
   }
 }

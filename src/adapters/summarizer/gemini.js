@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { normalizeNotes, SUMMARY_PROMPT } from './notes.js';
+import { withRetry } from './errors.js';
 import { config } from '../../config/env.js';
 
 export function parseGeminiNotes(raw = '') {
@@ -23,7 +24,9 @@ export class GeminiSummarizer {
   }
   async summarize(transcript, meta) {
     const prompt = `${SUMMARY_PROMPT}\n\nMeeting: ${meta.channelName || ''} on ${meta.date || ''}\nAttendees: ${(meta.attendees || []).join(', ')}\n\nTranscript:\n${transcript}`;
-    const result = await this.model.generateContent(prompt);
+    // GoogleGenerativeAIFetchError carries .status, so withRetry backs off on
+    // transient 5xx (e.g. 503 "high demand") and surfaces 401/429 immediately.
+    const result = await withRetry(() => this.model.generateContent(prompt));
     return parseGeminiNotes(result.response.text());
   }
 }

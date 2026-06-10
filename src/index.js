@@ -49,8 +49,9 @@ const manager = new MeetingManager({
       await rm(session.audioDir, { recursive: true, force: true }).catch(() => {});
     } catch (err) {
       console.error(`Meeting ${meetingId} failed:`, err.message);
+      const reason = err.userMessage || err.message;
       const ch = await client.channels.fetch(cfg.notesChannelId || meeting.channel_id).catch(() => null);
-      if (ch) await ch.send(`⚠️ Meeting ${meetingId} processing failed (${db.getMeeting(meetingId).status}). Transcript is saved if available.`).catch(() => {});
+      if (ch) await ch.send(`⚠️ Meeting ${meetingId} failed: ${reason}\nThe transcript is saved — an admin can retry with \`node scripts/reprocess-meeting.mjs ${meetingId}\`.`).catch(() => {});
     }
   },
 });

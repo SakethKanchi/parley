@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { commandsJSON } from '../src/commands/definitions.js';
 
-test('exports the eight v1 commands as JSON', () => {
+test('exports the v2 commands as JSON', () => {
   const names = commandsJSON().map((c) => c.name).sort();
-  assert.deepEqual(names, ['history', 'join', 'leave', 'raw', 'search', 'setup', 'status', 'summary']);
+  assert.deepEqual(names, ['history', 'join', 'leave', 'post', 'raw', 'search', 'setup', 'status', 'summary']);
 });
 
 test('search command has a required keyword option', () => {

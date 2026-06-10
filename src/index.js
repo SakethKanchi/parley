@@ -5,7 +5,7 @@ import { rm } from 'node:fs/promises';
 import { config, validateEnv } from './config/env.js';
 import { openDb } from './store/db.js';
 import { getGuildConfig, setGuildConfig } from './store/config.js';
-import { deployCommands } from './commands/deploy.js';
+import { deployCommands, clearGlobalCommands } from './commands/deploy.js';
 import { MeetingManager } from './voice/meeting-manager.js';
 import { TrackRegistry, attachCapture } from './voice/capture.js';
 import { processMeeting } from './pipeline/orchestrator.js';
@@ -149,11 +149,28 @@ async function stopAndLeave(guildId, channelId) {
 
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
-  await deployCommands();
+  // Per-guild registration is instant; global is slow and cache-flaky (the
+  // reason newly-added commands like /post showed up intermittently). Clear the
+  // old global set so it can't shadow the guild commands, then register to every
+  // guild the bot is in.
+  await clearGlobalCommands().catch((e) => console.error('clear global commands failed:', e.message));
+  for (const [guildId] of client.guilds.cache) {
+    await deployCommands(config.discordClientId, config.discordToken, guildId)
+      .then(() => console.log(`Registered commands in guild ${guildId}`))
+      .catch((e) => console.error(`deploy to guild ${guildId} failed:`, e.message));
+  }
   for (const m of db.findOrphanedMeetings()) {
     db.setMeetingStatus(m.id, 'transcription_failed');
     console.warn(`Orphaned meeting ${m.id} marked transcription_failed on boot.`);
   }
+});
+
+// Register commands when the bot joins a new guild, so they're available
+// immediately without waiting for a restart.
+client.on('guildCreate', (guild) => {
+  deployCommands(config.discordClientId, config.discordToken, guild.id)
+    .then(() => console.log(`Registered commands in new guild ${guild.id}`))
+    .catch((e) => console.error(`deploy to new guild ${guild.id} failed:`, e.message));
 });
 
 client.on('voiceStateUpdate', async (oldState, newState) => {

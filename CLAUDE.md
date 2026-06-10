@@ -30,7 +30,7 @@ Slash commands: /join /leave /summary /history /search /setup (src/commands/). A
 ## Key conventions / gotchas
 
 - `DATA_DIR` resolved once in src/config/env.js (`DATA_DIR` env → `/data` if present → cwd). SQLite db + audio/ live under it.
-- Secrets (DISCORD_TOKEN, GEMINI_API_KEY, OPENAI_API_KEY, OLLAMA_URL) live in .env ONLY — /setup never accepts API keys (Discord retains message content). /setup picks provider/model/behavior and validates the needed key exists in env.
+- Secrets (DISCORD_TOKEN, GEMINI_API_KEY, OPENAI_API_KEY, OPENCODE_API_KEY, OLLAMA_URL) live in .env ONLY — /setup never accepts API keys (Discord retains message content). /setup picks provider/model/behavior and validates the needed key exists in env.
 - Summarizer adapters return StructuredNotes { tldr, topics[], decisions[], openQuestions[], actionItems[{assignee,task}] }; action items are rendered grouped per person.
 - Bot uses minimal gateway intents [Guilds, GuildVoiceStates] — do NOT add MessageContent (privileged; would fail login).
 - PCM filenames are `audio/<meetingId>/<userId>_<startMs>.pcm` (avoids the v1 underscore-in-name parsing bug).

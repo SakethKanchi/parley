@@ -120,6 +120,7 @@ STT_URL=http://127.0.0.1:8000
 # Summarizer — set the key for whichever provider you use
 GEMINI_API_KEY=your_gemini_api_key      # gemini (default, free tier)
 OPENAI_API_KEY=your_openai_api_key      # openai-compatible providers
+OPENCODE_API_KEY=your_opencode_api_key  # opencode zen gateway
 OLLAMA_URL=http://127.0.0.1:11434       # ollama (offline, no key needed)
 
 # Optional: persistent data dir (defaults to /data if present, else cwd)
@@ -195,6 +196,7 @@ pm2 save
 
 - **gemini** *(default)* — Gemini 2.5 Flash, free tier available. Set `GEMINI_API_KEY`.
 - **openai** — any OpenAI-compatible endpoint. Set `OPENAI_API_KEY` (and `OPENAI_BASE_URL` for third-party gateways).
+- **opencode** — [OpenCode Zen Go](https://opencode.ai/zen/go/v1/models) gateway (OpenAI-compatible). Set `OPENCODE_API_KEY`. Defaults to `deepseek-v4-flash` if no model is set. Use the **bare** model id (no `opencode/` prefix) — e.g. `deepseek-v4-flash`, `minimax-m3`, `kimi-k2.6`, `glm-5.1`, `qwen3.7-max`; full list at [`/zen/go/v1/models`](https://opencode.ai/zen/go/v1/models). Override the endpoint with `OPENCODE_BASE_URL` (default `https://opencode.ai/zen/go/v1`).
 - **ollama** — fully offline, no key. Run Ollama locally and set `OLLAMA_URL`.
 
 All providers return the same structured-notes shape, so output is consistent regardless of which you pick.

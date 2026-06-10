@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateSetup } from '../src/commands/setup-logic.js';
 
-const env = { gemini: { apiKey: 'g' }, openai: { apiKey: '' }, ollama: { url: 'http://x' } };
+const env = { gemini: { apiKey: 'g' }, openai: { apiKey: '' }, opencode: { apiKey: '' }, ollama: { url: 'http://x' } };
 
 test('accepts gemini when key present', () => {
   const r = validateSetup({ provider: 'gemini', model: 'gemini-2.5-flash' }, env);
@@ -14,6 +14,19 @@ test('rejects openai when key missing', () => {
   const r = validateSetup({ provider: 'openai', model: 'gpt-x' }, env);
   assert.equal(r.ok, false);
   assert.match(r.error, /OPENAI_API_KEY/);
+});
+
+test('rejects opencode when key missing', () => {
+  const r = validateSetup({ provider: 'opencode', model: 'gpt-5.5' }, env);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /OPENCODE_API_KEY/);
+});
+
+test('accepts opencode when key present', () => {
+  const r = validateSetup({ provider: 'opencode', model: 'gpt-5.5' }, { ...env, opencode: { apiKey: 'k' } });
+  assert.equal(r.ok, true);
+  assert.equal(r.patch.summarizerProvider, 'opencode');
+  assert.equal(r.patch.summarizerModel, 'gpt-5.5');
 });
 
 test('rejects unknown provider', () => {

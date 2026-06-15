@@ -292,6 +292,7 @@ client.on('interactionCreate', async (interaction) => {
         useThread: interaction.options.getBoolean('thread') ?? undefined,
         autoJoin: interaction.options.getBoolean('autojoin') ?? undefined,
         language: interaction.options.getString('language') ?? undefined,
+        summary_language: interaction.options.getString('summary_language') ?? undefined,
       };
       const result = validateSetup(input, config);
       if (!result.ok) return interaction.reply({ content: `❌ ${result.error}`, ephemeral: true });

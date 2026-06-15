@@ -1,4 +1,5 @@
 import { SUPPORTED_PROVIDERS } from '../adapters/summarizer/index.js';
+import { LANGUAGE_CODES, SUMMARY_LANGUAGE_VALUES } from '../adapters/summarizer/languages.js';
 
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large-v3', 'large-v3-turbo'];
 
@@ -33,7 +34,19 @@ export function validateSetup(input, env) {
   if (input.notesChannelId !== undefined) patch.notesChannelId = input.notesChannelId;
   if (input.useThread !== undefined) patch.useThread = !!input.useThread;
   if (input.autoJoin !== undefined) patch.autoJoin = !!input.autoJoin;
-  if (input.language !== undefined) patch.language = input.language;
+  if (input.language !== undefined) {
+    if (!LANGUAGE_CODES.has(input.language)) {
+      return { ok: false, error: `Invalid language. Use one of: ${[...LANGUAGE_CODES].join(', ')}.` };
+    }
+    patch.language = input.language;
+  }
+
+  if (input.summary_language !== undefined) {
+    if (!SUMMARY_LANGUAGE_VALUES.has(input.summary_language)) {
+      return { ok: false, error: `Invalid summary language. Use one of: ${[...SUMMARY_LANGUAGE_VALUES].join(', ')}.` };
+    }
+    patch.summaryLanguage = input.summary_language;
+  }
 
   return { ok: true, patch };
 }

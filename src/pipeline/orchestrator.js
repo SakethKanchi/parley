@@ -2,6 +2,7 @@ import { transcribeTracks } from './transcribe.js';
 import { buildTranscript, computeTalkTime } from './summarize.js';
 import { getSummarizer } from '../adapters/summarizer/index.js';
 import { describeSummarizerError } from '../adapters/summarizer/errors.js';
+import { resolveSummaryLanguage } from '../adapters/summarizer/languages.js';
 
 export async function processMeeting(db, meetingId, opts) {
   const meeting = db.getMeeting(meetingId);
@@ -23,7 +24,12 @@ export async function processMeeting(db, meetingId, opts) {
   const transcript = buildTranscript(utterances);
   const talktime = computeTalkTime(utterances);
   const attendees = db.listAttendees(meetingId).map((a) => a.display_name);
-  const meta = { channelName: meeting.channel_name, date: meeting.started_at, attendees };
+  const meta = {
+    channelName: meeting.channel_name,
+    date: meeting.started_at,
+    attendees,
+    summaryLanguage: resolveSummaryLanguage(opts.cfg),
+  };
 
   let notes;
   try {

@@ -47,3 +47,28 @@ test('rejects invalid whisper model', () => {
   assert.equal(r.ok, false);
   assert.match(r.error, /whisper/i);
 });
+
+test('accepts valid language + summary_language', () => {
+  const r = validateSetup({ language: 'de', summary_language: 'en' }, env);
+  assert.equal(r.ok, true);
+  assert.equal(r.patch.language, 'de');
+  assert.equal(r.patch.summaryLanguage, 'en');
+});
+
+test('accepts summary_language match', () => {
+  const r = validateSetup({ summary_language: 'match' }, env);
+  assert.equal(r.ok, true);
+  assert.equal(r.patch.summaryLanguage, 'match');
+});
+
+test('rejects unknown transcription language', () => {
+  const r = validateSetup({ language: 'zz' }, env);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /language/i);
+});
+
+test('rejects unknown summary_language', () => {
+  const r = validateSetup({ summary_language: 'zz' }, env);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /summary language/i);
+});

@@ -53,3 +53,15 @@ test('opencode defaults to deepseek-v4-flash when no model set', () => {
   const s = getSummarizer({ summarizerProvider: 'opencode' }, { opencode: { apiKey: 'k', baseUrl: 'http://x' } });
   assert.equal(s.model, 'deepseek-v4-flash');
 });
+
+test('summarizer prompt includes the summary-language instruction', async () => {
+  let sentBody;
+  const fetchImpl = async (_url, opts) => {
+    sentBody = JSON.parse(opts.body);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"tldr":"x"}' } }] }) };
+  };
+  const s = new OpenAISummarizer('m', 'http://x', 'k', fetchImpl);
+  await s.summarize('hello transcript', { attendees: ['Sam'], summaryLanguage: 'de' });
+  const prompt = sentBody.messages[0].content;
+  assert.match(prompt, /Write the entire summary in German\./);
+});

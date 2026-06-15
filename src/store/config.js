@@ -6,6 +6,7 @@ export const DEFAULTS = {
   useThread: true,
   autoJoin: true,
   language: 'auto',
+  summaryLanguage: 'en',
 };
 
 const COLS = {
@@ -16,6 +17,7 @@ const COLS = {
   useThread: 'use_thread',
   autoJoin: 'auto_join',
   language: 'language',
+  summaryLanguage: 'summary_language',
 };
 
 function fromRow(row) {
@@ -27,6 +29,7 @@ function fromRow(row) {
     useThread: row.use_thread == null ? DEFAULTS.useThread : !!row.use_thread,
     autoJoin: row.auto_join == null ? DEFAULTS.autoJoin : !!row.auto_join,
     language: row.language ?? DEFAULTS.language,
+    summaryLanguage: row.summary_language ?? DEFAULTS.summaryLanguage,
   };
 }
 
@@ -43,8 +46,8 @@ export function setGuildConfig(db, guildId, patch) {
   const merged = { ...current, ...safePatch, guildId };
   db.sql.prepare(
     `INSERT OR REPLACE INTO guild_config
-       (guild_id, summarizer_provider, summarizer_model, whisper_model, notes_channel_id, use_thread, auto_join, language)
-     VALUES (@guildId, @summarizerProvider, @summarizerModel, @whisperModel, @notesChannelId, @useThread, @autoJoin, @language)`
+       (guild_id, summarizer_provider, summarizer_model, whisper_model, notes_channel_id, use_thread, auto_join, language, summary_language)
+     VALUES (@guildId, @summarizerProvider, @summarizerModel, @whisperModel, @notesChannelId, @useThread, @autoJoin, @language, @summaryLanguage)`
   ).run({
     guildId,
     summarizerProvider: merged.summarizerProvider,
@@ -54,6 +57,7 @@ export function setGuildConfig(db, guildId, patch) {
     useThread: merged.useThread ? 1 : 0,
     autoJoin: merged.autoJoin ? 1 : 0,
     language: merged.language,
+    summaryLanguage: merged.summaryLanguage,
   });
   return merged;
 }

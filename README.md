@@ -190,7 +190,10 @@ pm2 save
 | `notes_channel` | Text channel where notes are posted (defaults to the meeting's channel) |
 | `thread` | Post notes in a thread (default: on) |
 | `autojoin` | Auto-join when 2+ people are in voice |
-| `language` | Transcription language code, or `auto` |
+| `language` | Spoken language (German, English, …) or `auto`-detect |
+| `summary_language` | Language for the notes/summary (default English), or `Match transcription` |
+
+> **Mixed-language meetings:** if you speak one language with words from another mixed in (e.g. German with English terms), pick that base language explicitly (e.g. `German`) instead of `auto` — auto-detect can flip per audio chunk and garble the transcript. `summary_language` controls the notes language independently.
 
 ## 🧠 Supported summarizers
 

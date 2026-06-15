@@ -1,5 +1,6 @@
 import { parseGeminiNotes } from './gemini.js';
 import { SUMMARY_PROMPT } from './notes.js';
+import { summaryLanguageInstruction } from './languages.js';
 import { httpError, withRetry } from './errors.js';
 import { config } from '../../config/env.js';
 
@@ -9,7 +10,7 @@ export class OpenAISummarizer {
     this.model = model; this.baseUrl = baseUrl; this.apiKey = apiKey; this.fetchImpl = fetchImpl;
   }
   async summarize(transcript, meta) {
-    const prompt = `${SUMMARY_PROMPT}\n\nAttendees: ${(meta.attendees || []).join(', ')}\n\nTranscript:\n${transcript}`;
+    const prompt = `${SUMMARY_PROMPT}${summaryLanguageInstruction(meta.summaryLanguage)}\n\nAttendees: ${(meta.attendees || []).join(', ')}\n\nTranscript:\n${transcript}`;
     const body = await withRetry(async () => {
       const res = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
         method: 'POST',

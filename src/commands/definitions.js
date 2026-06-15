@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
 import { SUPPORTED_PROVIDERS } from '../adapters/summarizer/index.js';
 import { WHISPER_MODELS } from './setup-logic.js';
+import { LANGUAGES } from '../adapters/summarizer/languages.js';
 
 export function buildCommands() {
   return [
@@ -26,7 +27,10 @@ export function buildCommands() {
       .addChannelOption((o) => o.setName('notes_channel').setDescription('Where to post notes').addChannelTypes(ChannelType.GuildText))
       .addBooleanOption((o) => o.setName('thread').setDescription('Post notes in a thread'))
       .addBooleanOption((o) => o.setName('autojoin').setDescription('Auto-join when 2+ people are in voice'))
-      .addStringOption((o) => o.setName('language').setDescription('Language code or "auto"')),
+      .addStringOption((o) => o.setName('language').setDescription('Spoken language (pick German to fix DE/EN mixing)')
+        .addChoices(...LANGUAGES.map((l) => ({ name: l.name, value: l.code })), { name: 'Auto-detect', value: 'auto' }))
+      .addStringOption((o) => o.setName('summary_language').setDescription('Language for the notes/summary')
+        .addChoices(...LANGUAGES.map((l) => ({ name: l.name, value: l.code })), { name: 'Match transcription', value: 'match' })),
   ];
 }
 

@@ -13,8 +13,24 @@ test('search command has a required keyword option', () => {
   assert.equal(opt.required, true);
 });
 
-test('setup command exposes provider/model/whisper/thread/autojoin/channel/language options', () => {
+test('setup command exposes provider/model/whisper/thread/autojoin/channel/language/summary_language options', () => {
   const setup = commandsJSON().find((c) => c.name === 'setup');
   const names = setup.options.map((o) => o.name).sort();
-  assert.deepEqual(names, ['autojoin', 'language', 'model', 'notes_channel', 'provider', 'thread', 'whisper_model']);
+  assert.deepEqual(names, ['autojoin', 'language', 'model', 'notes_channel', 'provider', 'summary_language', 'thread', 'whisper_model']);
+});
+
+test('language option offers a German choice and auto', () => {
+  const setup = commandsJSON().find((c) => c.name === 'setup');
+  const lang = setup.options.find((o) => o.name === 'language');
+  const values = lang.choices.map((c) => c.value);
+  assert.ok(values.includes('de'));
+  assert.ok(values.includes('auto'));
+});
+
+test('summary_language option offers match', () => {
+  const setup = commandsJSON().find((c) => c.name === 'setup');
+  const sl = setup.options.find((o) => o.name === 'summary_language');
+  const values = sl.choices.map((c) => c.value);
+  assert.ok(values.includes('match'));
+  assert.ok(values.includes('en'));
 });

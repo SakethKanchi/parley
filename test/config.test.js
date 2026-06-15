@@ -49,3 +49,14 @@ test('setGuildConfig can reset notesChannelId back to null', () => {
   setGuildConfig(db, 'g', { notesChannelId: null });
   assert.equal(getGuildConfig(db, 'g').notesChannelId, null);
 });
+
+test('summaryLanguage defaults to en', () => {
+  const db = openDb(':memory:');
+  assert.equal(getGuildConfig(db, 'g').summaryLanguage, 'en');
+});
+
+test('setGuildConfig persists summaryLanguage', () => {
+  const db = openDb(':memory:');
+  setGuildConfig(db, 'g', { summaryLanguage: 'de' });
+  assert.equal(getGuildConfig(db, 'g').summaryLanguage, 'de');
+});

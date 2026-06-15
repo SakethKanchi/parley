@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS guild_config (
   guild_id TEXT PRIMARY KEY,
   summarizer_provider TEXT, summarizer_model TEXT,
   whisper_model TEXT, notes_channel_id TEXT,
-  use_thread INTEGER, auto_join INTEGER, language TEXT
+  use_thread INTEGER, auto_join INTEGER, language TEXT, summary_language TEXT
 );
 `;
 
@@ -38,6 +38,12 @@ export function openDb(path) {
   const sql = new DatabaseSync(path);
   sql.exec('PRAGMA journal_mode = WAL');
   sql.exec(SCHEMA);
+
+  // Migration: add summary_language to dbs created before the column existed.
+  const cols = sql.prepare(`PRAGMA table_info(guild_config)`).all();
+  if (!cols.some((c) => c.name === 'summary_language')) {
+    sql.exec(`ALTER TABLE guild_config ADD COLUMN summary_language TEXT`);
+  }
 
   return {
     sql,

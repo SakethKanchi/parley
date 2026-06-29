@@ -16,6 +16,8 @@ export const api = {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question }),
   }).then(json),
   setTodoDone: (id, done) => fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ done }) }).then(json),
+  deleteMeeting: (id) => fetch(`/api/meetings/${id}`, { method: 'DELETE' }).then(json),
+  mergeMeetings: (id, sourceIds) => fetch(`/api/meetings/${id}/merge`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceIds }) }).then(json),
   search: (g, q) => fetch(`/api/guilds/${g}/search?q=${encodeURIComponent(q)}`).then(json),
   config: (g) => fetch(`/api/guilds/${g}/config`).then(json),
   saveConfig: (g, patch) => fetch(`/api/guilds/${g}/config`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }).then(json),

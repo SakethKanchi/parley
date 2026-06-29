@@ -50,7 +50,8 @@ export default function MeetingsRail() {
     if (!guildId) { setMeetings([]); return; }
     let stale = false;
     api.meetings(guildId)
-      .then((rows) => { if (!stale) setMeetings(Array.isArray(rows) ? rows : []); })
+      // Hide empty meetings (no speech) — orphans/duplicates with nothing to show.
+      .then((rows) => { if (!stale) setMeetings((Array.isArray(rows) ? rows : []).filter((m) => (m.utterance_count ?? 1) > 0)); })
       .catch(() => { if (!stale) setMeetings([]); });
     return () => { stale = true; };
   }, [guildId]);

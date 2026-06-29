@@ -318,9 +318,107 @@ function AskBox({ guildId, meetingId }) {
   );
 }
 
+/* ── meeting actions (delete / merge) ─────────────────────────────────── */
+
+function MeetingActions({ meeting, meetings }) {
+  const [open, setOpen] = useState(false);
+  const [merging, setMerging] = useState(false); // false | 'pick' | 'busy'
+  const [sources, setSources] = useState(() => new Set());
+  const [err, setErr] = useState(null);
+
+  const others = (meetings || []).filter((m) => m.id !== meeting.id);
+
+  async function handleDelete() {
+    setOpen(false);
+    if (!window.confirm('Delete this meeting, its transcript, summary and action items? This cannot be undone.')) return;
+    try {
+      await api.deleteMeeting(meeting.id);
+      window.location.assign('/'); // full reload so the rail drops it too
+    } catch (e) { setErr(e?.message || 'Delete failed'); }
+  }
+
+  function toggleSource(id) {
+    setSources((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  async function handleMerge() {
+    if (sources.size === 0) return;
+    setMerging('busy');
+    setErr(null);
+    try {
+      await api.mergeMeetings(meeting.id, [...sources]);
+      window.location.assign(`/meetings/${meeting.id}`); // reload re-summarized note
+    } catch (e) {
+      setErr(e?.message || 'Merge failed');
+      setMerging('pick');
+    }
+  }
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        onClick={() => { setOpen((v) => !v); setMerging(false); }}
+        aria-label="Meeting actions"
+        className="h-8 w-8 flex items-center justify-center rounded-md border border-edge text-muted hover:text-ink hover:border-muted transition-colors duration-150 bg-transparent cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
+        </svg>
+      </button>
+
+      {open && merging === false && (
+        <div className="absolute right-0 mt-1 w-44 bg-bg-elevated border border-edge rounded-md shadow-lg py-1 z-10" role="menu">
+          <button
+            onClick={() => { setMerging('pick'); setOpen(false); }}
+            disabled={others.length === 0}
+            className="w-full text-left px-3 py-1.5 text-sm text-ink hover:bg-panel disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
+            role="menuitem"
+          >
+            Merge another meeting…
+          </button>
+          <button
+            onClick={handleDelete}
+            className="w-full text-left px-3 py-1.5 text-sm text-error hover:bg-panel cursor-pointer"
+            role="menuitem"
+          >
+            Delete meeting
+          </button>
+        </div>
+      )}
+
+      {merging !== false && (
+        <div className="absolute right-0 mt-1 w-80 bg-bg-elevated border border-edge rounded-md shadow-lg p-3 z-10">
+          <p className="text-sm font-medium text-ink mb-2">Merge into this note</p>
+          <div className="max-h-64 overflow-y-auto -mx-1 px-1 space-y-0.5">
+            {others.map((m) => (
+              <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-panel cursor-pointer text-sm">
+                <input type="checkbox" className="pcheck h-4 w-4" checked={sources.has(m.id)} onChange={() => toggleSource(m.id)} disabled={merging === 'busy'} />
+                <span className="text-ink">{fmtTitle(m.started_at)}</span>
+                <span className="text-muted text-xs ml-auto">{fmtTime(m.started_at)} · {m.utterance_count ?? 0}u</span>
+              </label>
+            ))}
+          </div>
+          {err && <p className="text-xs text-error mt-2" role="alert">{err}</p>}
+          <div className="flex items-center justify-end gap-2 mt-3">
+            <button onClick={() => { setMerging(false); setSources(new Set()); setErr(null); }} disabled={merging === 'busy'} className="text-sm text-muted hover:text-ink px-2 py-1 cursor-pointer disabled:opacity-40">Cancel</button>
+            <button onClick={handleMerge} disabled={sources.size === 0 || merging === 'busy'} className="text-sm bg-primary text-white rounded px-3 py-1 cursor-pointer disabled:opacity-40">
+              {merging === 'busy' ? 'Merging…' : `Merge ${sources.size || ''}`.trim()}
+            </button>
+          </div>
+        </div>
+      )}
+      {err && merging === false && <p className="text-xs text-error mt-1 absolute right-0 whitespace-nowrap">{err}</p>}
+    </div>
+  );
+}
+
 /* ── note document ────────────────────────────────────────────────────── */
 
-function NoteDocument({ data, todos, guildId }) {
+function NoteDocument({ data, todos, guildId, meetings }) {
   const { meeting, summary, attendees, utterances } = data;
   const notes = summary?.notes;
   const duration = fmtDuration(meeting.started_at, meeting.ended_at);
@@ -330,9 +428,12 @@ function NoteDocument({ data, todos, guildId }) {
 
       {/* Meeting header */}
       <header className="mb-8">
-        <h1 className="font-display text-2xl font-semibold text-ink leading-tight">
-          {fmtTitle(meeting.started_at)}
-        </h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="font-display text-2xl font-semibold text-ink leading-tight">
+            {fmtTitle(meeting.started_at)}
+          </h1>
+          <MeetingActions meeting={meeting} meetings={meetings} />
+        </div>
         <p className="text-sm text-muted mt-1.5">
           {fmtTime(meeting.started_at)}
           {duration && <span> · {duration}</span>}
@@ -457,7 +558,7 @@ export default function Reading() {
     let stale = false;
     setMeetings(null);
     api.meetings(guildId)
-      .then((rows) => { if (!stale) setMeetings(Array.isArray(rows) ? rows : []); })
+      .then((rows) => { if (!stale) setMeetings((Array.isArray(rows) ? rows : []).filter((m) => (m.utterance_count ?? 1) > 0)); })
       .catch(() => { if (!stale) setMeetings([]); });
     return () => { stale = true; };
   }, [guildId]);
@@ -516,6 +617,7 @@ export default function Reading() {
       data={data}
       todos={todos}
       guildId={guildId}
+      meetings={meetings ?? []}
     />
   );
 }

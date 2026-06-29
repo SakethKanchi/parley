@@ -125,9 +125,21 @@ export function openDb(path) {
       }
       return n;
     },
-    listTodos(guildId, { open = false } = {}) {
-      const where = open ? `guild_id = ? AND done = 0` : `guild_id = ?`;
-      return sql.prepare(`SELECT * FROM todos WHERE ${where} ORDER BY id DESC`).all(guildId);
+    listTodos(guildId, { open = false, assignee } = {}) {
+      const where = ['guild_id = ?'];
+      const args = [guildId];
+      if (open) where.push('done = 0');
+      if (assignee !== undefined) {
+        if (assignee === null) where.push('assignee IS NULL');
+        else { where.push('assignee = ?'); args.push(assignee); }
+      }
+      return sql.prepare(`SELECT * FROM todos WHERE ${where.join(' AND ')} ORDER BY id DESC`).all(...args);
+    },
+    listAssignees(guildId) {
+      // NULL sorts first (SQLite), then alphabetical — the dropdown renders NULL as "Unassigned".
+      return sql.prepare(
+        `SELECT DISTINCT assignee FROM todos WHERE guild_id = ? ORDER BY assignee IS NOT NULL, assignee`
+      ).all(guildId);
     },
     setTodoDone(id, done) {
       sql.prepare(`UPDATE todos SET done = ? WHERE id = ?`).run(done ? 1 : 0, id);

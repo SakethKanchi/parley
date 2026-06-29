@@ -1,5 +1,9 @@
 // src/web/api.js
 import { Router } from 'express';
+import { ChannelType } from 'discord.js';
+import { getGuildConfig, setGuildConfig } from '../store/config.js';
+import { validateSetup, availableProviders } from '../commands/setup-logic.js';
+import { config as env } from '../config/env.js';
 
 function guildName(client, id) {
   return client?.guilds?.cache?.get(id)?.name || id;
@@ -40,6 +44,26 @@ export function apiRouter({ db, client }) {
   r.get('/guilds/:g/search', (req, res) => {
     const q = (req.query.q || '').trim();
     res.json(q ? db.searchUtterances(req.params.g, q) : []);
+  });
+
+  r.get('/guilds/:g/config', (req, res) => {
+    const guild = client?.guilds?.cache?.get(req.params.g);
+    const channels = guild
+      ? [...guild.channels.cache.filter((c) => c.type === ChannelType.GuildText).values()]
+          .map((c) => ({ id: c.id, name: c.name }))
+      : [];
+    res.json({
+      config: getGuildConfig(db, req.params.g),
+      providers: availableProviders(env),
+      channels,
+    });
+  });
+
+  r.patch('/guilds/:g/config', (req, res) => {
+    const result = validateSetup(req.body, env);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    const config = setGuildConfig(db, req.params.g, result.patch);
+    res.json({ ok: true, config });
   });
 
   return r;

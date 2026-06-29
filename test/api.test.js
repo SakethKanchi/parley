@@ -93,6 +93,23 @@ test('GET /api/guilds merges live client cache with db guilds (no duplicates)', 
   } finally { close(); }
 });
 
+test('todos assignee filter + assignees endpoint', async () => {
+  const db = openDb(':memory:');
+  const m = db.createMeeting({ guildId: 'g1', channelId: 'c', channelName: 'g', startedAt: 'now' });
+  db.seedTodos(m, 'g1', [{ assignee: 'Alice', task: 'a' }, { assignee: null, task: 'c' }]);
+  const { base, close } = await listen(appWith(db));
+  try {
+    const all = await (await fetch(`${base}/api/guilds/g1/todos`)).json();
+    assert.equal(all.length, 2);
+    const alice = await (await fetch(`${base}/api/guilds/g1/todos?assignee=Alice`)).json();
+    assert.equal(alice.length, 1);
+    const un = await (await fetch(`${base}/api/guilds/g1/todos?assignee=__unassigned__`)).json();
+    assert.equal(un.length, 1);
+    const names = (await (await fetch(`${base}/api/guilds/g1/assignees`)).json()).map((r) => r.assignee);
+    assert.deepEqual(names, [null, 'Alice']);
+  } finally { close(); }
+});
+
 test('GET /api/meetings/:id returns bundle', async () => {
   const db = openDb(':memory:');
   const id = db.createMeeting({ guildId: 'g1', channelId: 'c', channelName: 'gen', startedAt: 'now' });

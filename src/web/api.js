@@ -36,7 +36,14 @@ export function apiRouter({ db, client }) {
   });
 
   r.get('/guilds/:g/todos', (req, res) => {
-    res.json(db.listTodos(req.params.g, { open: req.query.open === '1' }));
+    const { open, assignee } = req.query;
+    const opts = { open: open === '1' };
+    if (assignee !== undefined) opts.assignee = assignee === '__unassigned__' ? null : assignee;
+    res.json(db.listTodos(req.params.g, opts));
+  });
+
+  r.get('/guilds/:g/assignees', (req, res) => {
+    res.json(db.listAssignees(req.params.g));
   });
 
   r.patch('/todos/:id', (req, res) => {

@@ -2,5 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Dark theme (default) ─────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:          #08090E;
+  --bg-elevated: #0B0D13;
+  --panel:       #11131B;
+  --panel-2:     #191C28;
+  --primary:     #5B6BFF;
+  --accent:      #2FD673;
+  --ink:         #E9EBF4;
+  --muted:       #888FA6;
+  --edge:        #232838;
+}
+
+/* ─── Light theme ───────────────────────────────────────────────────── */
+/*
+ * Palette rationale (impeccable product register):
+ *   - No warm/cream: all neutrals tilt toward 265° (brand hue), not warm
+ *   - bg #F5F6FA: near-white with cool blue tint (OKLCH ~97% L)
+ *   - bg-elevated #FFFFFF: pure white for cards and modals
+ *   - panel #E8EAF2: sidebar / panel surface (OKLCH ~93% L)
+ *   - panel-2 #DEE0EC: nested panel (OKLCH ~90% L)
+ *   - primary #4755E6: same 265° hue, darkened to ~46% L → white text 5.6:1 ✓
+ *   - accent #1A964A: same 155° hue, darkened to ~52% L → readable on light surfaces ✓
+ *   - ink #0F1018: near-black 12% L, blue tint → 17:1 on bg ✓
+ *   - muted #565B73: 44% L blue-grey → 6:1 on bg, passes WCAG AA ✓
+ *   - edge #C5C7D8: cool border (OKLCH ~84% L)
+ */
+[data-theme="light"] {
+  --bg:          #F5F6FA;
+  --bg-elevated: #FFFFFF;
+  --panel:       #E8EAF2;
+  --panel-2:     #DEE0EC;
+  --primary:     #4755E6;
+  --accent:      #1A964A;
+  --ink:         #0F1018;
+  --muted:       #565B73;
+  --edge:        #C5C7D8;
+}
+
+/* ─── Base ──────────────────────────────────────────────────────────── */
 body { @apply bg-bg text-ink font-sans; }
 h1, h2, h3 { @apply font-display; }

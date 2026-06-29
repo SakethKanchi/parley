@@ -1,11 +1,19 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
-        bg: '#08090E', 'bg-elevated': '#0B0D13', panel: '#11131B', 'panel-2': '#191C28',
-        primary: '#5B6BFF', accent: '#2FD673', ink: '#E9EBF4', muted: '#888FA6', edge: '#232838',
+        bg: 'var(--bg)',
+        'bg-elevated': 'var(--bg-elevated)',
+        panel: 'var(--panel)',
+        'panel-2': 'var(--panel-2)',
+        primary: 'var(--primary)',
+        accent: 'var(--accent)',
+        ink: 'var(--ink)',
+        muted: 'var(--muted)',
+        edge: 'var(--edge)',
       },
       fontFamily: {
         display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'system-ui', 'sans-serif'],

@@ -54,8 +54,8 @@ function Skeleton() {
       role="status"
       aria-label="Loading action items"
     >
-      {[92, 78, 85, 63, 80, 71].map((w, i) => (
-        <div key={i} className="flex items-start gap-3 px-3 py-2.5 rounded">
+      {[92, 78, 85, 63, 80, 71].map((w) => (
+        <div key={w} className="flex items-start gap-3 px-3 py-2.5 rounded">
           <div className="mt-0.5 h-3.5 w-3.5 bg-panel-2 rounded shrink-0" />
           <div className="flex-1 space-y-1.5">
             <div className="h-3.5 bg-panel-2 rounded" style={{ width: `${w}%` }} />
@@ -144,6 +144,12 @@ export default function ActionItems() {
   const [assignees, setAssignees] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Reset filters when guild changes so stale assignee values don't linger
+  useEffect(() => {
+    setAssigneeFilter(ALL_ASSIGNEES);
+    setShowCompleted(false);
+  }, [guildId]);
 
   // Fetch assignee list whenever the guild changes
   useEffect(() => {
@@ -274,7 +280,7 @@ export default function ActionItems() {
       {loading && <Skeleton />}
 
       {!loading && error && (
-        <p className="text-sm text-muted py-4" role="alert">
+        <p className="text-sm text-error py-4" role="alert">
           Could not load action items: {error}
         </p>
       )}

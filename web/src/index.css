@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Layout geometry ───────────────────────────────────────────────── */
+:root {
+  --header-h: 3rem;   /* 48px — compact enough to not compete with content   */
+  --rail-w:   220px;  /* meetings sidebar — enough for channel + date labels  */
+}
+
 /* ─── Dark theme (default) ─────────────────────────────────────────── */
 [data-theme="dark"] {
   --bg:          #08090E;

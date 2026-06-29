@@ -12,20 +12,42 @@ const ALL_DAYS = Symbol('all-days');
 
 /* ── assignee parsing ─────────────────────────────────────────────────────
    The summarizer stores multi-person action items as one comma-joined string
-   ("Devin Robinson, Vineel"). Split so each person is a clean filter option
-   and a shared task shows up under every assignee it names. `null` = the
-   Unassigned bucket (no names). Name variants like "Devin" vs "Devin Robinson"
-   are left distinct — we can't safely merge them.
+   ("Devin Robinson, Vineel"), and emits the same person under different forms
+   ("Devin" and "Devin Robinson"). Split on commas, then canonicalize: a short
+   name that is a word-prefix of a longer one folds into the longer name. We
+   don't have attendee identity client-side, so prefix-clustering the names we
+   actually see is the best we can do without a backend change.
 ────────────────────────────────────────────────────────────────────────── */
 function splitAssignees(s) {
   if (s == null) return [];
   return s.split(',').map((x) => x.trim()).filter(Boolean);
 }
 
-function matchesAssignee(todo, filter) {
+// name -> canonical (longest variant it word-prefixes). "Devin" -> "Devin Robinson".
+function buildCanonical(names) {
+  const uniq = [...new Set(names)];
+  const longestFirst = [...uniq].sort((a, b) => b.length - a.length);
+  const map = new Map();
+  for (const n of uniq) {
+    const nl = n.toLowerCase();
+    const canon = longestFirst.find((c) => {
+      const cl = c.toLowerCase();
+      return cl === nl || cl.startsWith(nl + ' ');
+    });
+    map.set(n, canon || n);
+  }
+  return map;
+}
+
+// Canonical people on a todo (deduped). canonMap from buildCanonical.
+function peopleOf(todo, canonMap) {
+  return [...new Set(splitAssignees(todo.assignee).map((n) => canonMap.get(n) || n))];
+}
+
+function matchesAssignee(todo, filter, canonMap) {
   if (filter === ALL_ASSIGNEES) return true;
   if (filter === null) return todo.assignee == null;
-  return splitAssignees(todo.assignee).includes(filter);
+  return peopleOf(todo, canonMap).includes(filter);
 }
 
 /* ── day helpers ──────────────────────────────────────────────────────────
@@ -91,7 +113,7 @@ function Skeleton() {
 
 /* ── single todo row ──────────────────────────────────────────────────────*/
 
-function TodoRow({ todo, onToggle }) {
+function TodoRow({ todo, onToggle, assigneeLabel }) {
   const [busy, setBusy] = useState(false);
   const done = Boolean(todo.done);
 
@@ -120,7 +142,7 @@ function TodoRow({ todo, onToggle }) {
           {todo.task}
         </span>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          <span className="text-xs text-muted">{todo.assignee ?? 'Unassigned'}</span>
+          <span className="text-xs text-muted">{assigneeLabel}</span>
           <span className="text-edge text-xs leading-none select-none" aria-hidden="true">·</span>
           <Link
             to={`/meetings/${todo.meeting_id}`}
@@ -193,23 +215,26 @@ export default function ActionItems() {
     setVersion((v) => v + 1);
   }
 
-  // People list from ALL todos (independent of the day filter) so switching day
-  // never hides a person from the dropdown.
-  const { people, hasUnassigned } = useMemo(() => {
-    const set = new Set();
+  // Canonical-name map + people list from ALL todos (independent of the day
+  // filter) so switching day never hides a person. Variants like "Devin" and
+  // "Devin Robinson" collapse to one canonical option.
+  const { canonMap, people, hasUnassigned } = useMemo(() => {
+    const raw = [];
     let unassigned = false;
     for (const t of todos) {
       const names = splitAssignees(t.assignee);
       if (names.length === 0) unassigned = true;
-      names.forEach((n) => set.add(n));
+      raw.push(...names);
     }
-    return { people: [...set].sort((a, b) => a.localeCompare(b)), hasUnassigned: unassigned };
+    const map = buildCanonical(raw);
+    const canonical = [...new Set(raw.map((n) => map.get(n) || n))].sort((a, b) => a.localeCompare(b));
+    return { canonMap: map, people: canonical, hasUnassigned: unassigned };
   }, [todos]);
 
   // Apply the assignee filter, then derive the available days within that scope.
   const byAssignee = useMemo(
-    () => todos.filter((t) => matchesAssignee(t, assigneeFilter)),
-    [todos, assigneeFilter],
+    () => todos.filter((t) => matchesAssignee(t, assigneeFilter, canonMap)),
+    [todos, assigneeFilter, canonMap],
   );
   const days = useMemo(() => {
     const set = new Set(byAssignee.map((t) => localDayKey(t.created_at)));
@@ -229,6 +254,12 @@ export default function ActionItems() {
       : byAssignee.filter((t) => localDayKey(t.created_at) === effectiveDay)),
     [byAssignee, effectiveDay],
   );
+
+  // Canonical, deduped assignee label for a row.
+  const labelOf = (t) => {
+    const ps = peopleOf(t, canonMap);
+    return ps.length ? ps.join(', ') : 'Unassigned';
+  };
 
   function handleAssigneeChange(e) {
     const v = e.target.value;
@@ -310,13 +341,13 @@ export default function ActionItems() {
                 <ul className="space-y-px" role="list">
                   {visible
                     .filter((t) => localDayKey(t.created_at) === d)
-                    .map((todo) => <TodoRow key={todo.id} todo={todo} onToggle={handleToggle} />)}
+                    .map((todo) => <TodoRow key={todo.id} todo={todo} onToggle={handleToggle} assigneeLabel={labelOf(todo)} />)}
                 </ul>
               </section>
             ))
         ) : (
           <ul className="space-y-px" role="list">
-            {visible.map((todo) => <TodoRow key={todo.id} todo={todo} onToggle={handleToggle} />)}
+            {visible.map((todo) => <TodoRow key={todo.id} todo={todo} onToggle={handleToggle} assigneeLabel={labelOf(todo)} />)}
           </ul>
         )
       )}

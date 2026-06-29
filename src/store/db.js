@@ -32,6 +32,16 @@ CREATE TABLE IF NOT EXISTS guild_config (
   whisper_model TEXT, notes_channel_id TEXT,
   use_thread INTEGER, auto_join INTEGER, language TEXT, summary_language TEXT
 );
+CREATE TABLE IF NOT EXISTS todos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  meeting_id INTEGER,
+  assignee TEXT,
+  task TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS todos_dedup ON todos(meeting_id, COALESCE(assignee, ''), task);
 `;
 
 export function openDb(path) {
@@ -101,6 +111,44 @@ export function openDb(path) {
       if (!row) return null;
       const { notes_json, talktime_json, ...rest } = row;
       return { ...rest, notes: JSON.parse(notes_json), talktime: JSON.parse(talktime_json) };
+    },
+    seedTodos(meetingId, guildId, actionItems, createdAt = new Date().toISOString()) {
+      const stmt = sql.prepare(
+        `INSERT OR IGNORE INTO todos (guild_id, meeting_id, assignee, task, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      let n = 0;
+      for (const a of actionItems || []) {
+        if (!a || !a.task) continue;
+        const r = stmt.run(guildId, meetingId, a.assignee ?? null, a.task, createdAt);
+        n += r.changes;
+      }
+      return n;
+    },
+    listTodos(guildId, { open = false } = {}) {
+      const where = open ? `guild_id = ? AND done = 0` : `guild_id = ?`;
+      return sql.prepare(`SELECT * FROM todos WHERE ${where} ORDER BY id DESC`).all(guildId);
+    },
+    setTodoDone(id, done) {
+      sql.prepare(`UPDATE todos SET done = ? WHERE id = ?`).run(done ? 1 : 0, id);
+    },
+    listGuilds() {
+      return sql.prepare(
+        `SELECT guild_id FROM meetings WHERE guild_id IS NOT NULL
+         UNION SELECT guild_id FROM guild_config WHERE guild_id IS NOT NULL`
+      ).all();
+    },
+    backfillTodos() {
+      const rows = sql.prepare(
+        `SELECT s.meeting_id, m.guild_id, s.notes_json
+           FROM summaries s JOIN meetings m ON m.id = s.meeting_id`
+      ).all();
+      let n = 0;
+      for (const row of rows) {
+        const notes = JSON.parse(row.notes_json);
+        n += this.seedTodos(row.meeting_id, row.guild_id, notes.actionItems || []);
+      }
+      return n;
     },
   };
 }

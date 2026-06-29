@@ -28,13 +28,13 @@
 ## 🎬 Demo
 
 <p align="center">
-  <a href="https://github.com/SakethKanchi/parley/blob/master/assets/parley-demo.mp4">
+  <a href="https://streamable.com/joqv9e">
     <img src="./assets/parley-demo-poster.png" width="820" alt="Watch the Parley demo — a live meeting becomes structured notes" />
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/SakethKanchi/parley/blob/master/assets/parley-demo.mp4"><b>▶ Watch the 20s demo</b></a>
+  <a href="https://streamable.com/joqv9e"><b>▶ Watch the 20s demo</b></a>
 </p>
 
 <p align="center">

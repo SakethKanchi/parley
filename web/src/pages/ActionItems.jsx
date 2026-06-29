@@ -112,7 +112,7 @@ function TodoRow({ todo, onToggle }) {
         checked={done}
         onChange={handleChange}
         disabled={busy}
-        className="mt-0.5 shrink-0 accent-primary cursor-pointer disabled:cursor-default disabled:opacity-50"
+        className="pcheck mt-0.5"
         aria-label={todo.task}
       />
       <div className="min-w-0 flex-1">

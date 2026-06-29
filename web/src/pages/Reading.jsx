@@ -5,18 +5,27 @@ import { useGuild } from '../GuildContext.jsx';
 
 /* ── helpers ──────────────────────────────────────────────────────────── */
 
-function fmtDate(raw) {
-  if (!raw) return '';
-  try {
-    const d = new Date(typeof raw === 'string' ? raw.replace(' ', 'T') : raw);
-    if (Number.isNaN(d.getTime())) return String(raw);
-    const now = new Date();
-    return d.toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
-    });
-  } catch { return String(raw); }
+function toDate(raw) {
+  if (!raw) return null;
+  const d = new Date(typeof raw === 'string' ? raw.replace(' ', 'T') : raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// Every meeting is the same Discord channel, so the date is what makes a note
+// distinct — use it as the title ("Sunday, June 29").
+function fmtTitle(raw) {
+  const d = toDate(raw);
+  if (!d) return String(raw ?? '');
+  const now = new Date();
+  return d.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
+
+function fmtTime(raw) {
+  const d = toDate(raw);
+  return d ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
 }
 
 function fmtDuration(start, end) {
@@ -132,7 +141,7 @@ function ActionItem({ item, todo }) {
         checked={done}
         onChange={handleChange}
         disabled={!todo || busy}
-        className="mt-0.5 shrink-0 accent-primary cursor-pointer disabled:cursor-default disabled:opacity-50"
+        className="pcheck mt-0.5"
         aria-label={item.task}
       />
       <span
@@ -322,11 +331,12 @@ function NoteDocument({ data, todos, guildId }) {
       {/* Meeting header */}
       <header className="mb-8">
         <h1 className="font-display text-2xl font-semibold text-ink leading-tight">
-          #{meeting.channel_name}
+          {fmtTitle(meeting.started_at)}
         </h1>
         <p className="text-sm text-muted mt-1.5">
-          {fmtDate(meeting.started_at)}
+          {fmtTime(meeting.started_at)}
           {duration && <span> · {duration}</span>}
+          <span> · #{meeting.channel_name}</span>
         </p>
         {attendees?.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3" aria-label="Attendees">

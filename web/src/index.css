@@ -14,8 +14,8 @@
   --bg-elevated: #0B0D13;
   --panel:       #11131B;
   --panel-2:     #191C28;
-  --primary:     #5B6BFF;
-  --accent:      #2FD673;
+  --primary:     #6B70DB;
+  --accent:      #35C46E;
   --ink:         #E9EBF4;
   --muted:       #888FA6;
   --edge:        #232838;
@@ -66,4 +66,27 @@ h1, h2, h3 { @apply font-display; text-wrap: balance; }
 
 @media (prefers-reduced-motion: reduce) {
   .note-enter { animation: none; }
+}
+
+/* ─── Custom checkbox — the native box looks unfinished ─────────────── */
+@layer components {
+  .pcheck {
+    @apply appearance-none shrink-0 h-[18px] w-[18px] rounded-[5px] border border-edge bg-transparent relative cursor-pointer transition-colors duration-150;
+  }
+  .pcheck:hover { border-color: var(--muted); }
+  .pcheck:checked { background-color: var(--accent); border-color: var(--accent); }
+  .pcheck:checked::after {
+    content: "";
+    position: absolute;
+    left: 6px; top: 2.5px;
+    width: 4px; height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .pcheck:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--primary);
+  }
+  .pcheck:disabled { @apply opacity-50 cursor-default; }
 }

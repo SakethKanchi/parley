@@ -27,4 +27,16 @@ export class OpenCodeSummarizer {
     });
     return parseGeminiNotes(body.choices?.[0]?.message?.content ?? '');
   }
+  async ask(prompt) {
+    const body = await withRetry(async () => {
+      const res = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
+        body: JSON.stringify({ model: this.model, messages: [{ role: 'user', content: prompt }] }),
+      });
+      if (!res.ok) throw httpError('OpenCode', res.status, await res.text().catch(() => ''));
+      return res.json();
+    });
+    return body.choices?.[0]?.message?.content ?? '';
+  }
 }

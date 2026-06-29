@@ -21,4 +21,15 @@ export class OllamaSummarizer {
     });
     return parseGeminiNotes(body.message?.content ?? '');
   }
+  async ask(prompt) {
+    const body = await withRetry(async () => {
+      const res = await this.fetchImpl(`${this.url}/api/chat`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: this.model, stream: false, messages: [{ role: 'user', content: prompt }] }),
+      });
+      if (!res.ok) throw httpError('Ollama', res.status, await res.text().catch(() => ''));
+      return res.json();
+    });
+    return body.message?.content ?? '';
+  }
 }

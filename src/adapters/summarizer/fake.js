@@ -11,4 +11,5 @@ export class FakeSummarizer {
       actionItems: [{ assignee: 'Alice', task: 'do thing' }],
     });
   }
+  async ask(prompt) { return this.cannedAnswer || `Fake answer (${String(prompt).length} chars).`; }
 }

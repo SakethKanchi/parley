@@ -123,3 +123,23 @@ test('GET /api/meetings/:id returns bundle', async () => {
     assert.equal(bundle.utterances.length, 1);
   } finally { close(); }
 });
+
+test('POST ask returns an answer using the guild provider', async () => {
+  const db = openDb(':memory:');
+  const id = db.createMeeting({ guildId: 'g1', channelId: 'c', channelName: 'gen', startedAt: 'now' });
+  db.addUtterance({ meetingId: id, userId: 'u', displayName: 'Al', startMs: 0, endMs: 5, text: 'ship friday' });
+  db.sql.prepare(`INSERT INTO guild_config (guild_id, summarizer_provider) VALUES ('g1', 'fake')`).run();
+  const { base, close } = await listen(appWith(db));
+  try {
+    const r = await fetch(`${base}/api/guilds/g1/meetings/${id}/ask`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: 'when do we ship?' }),
+    });
+    assert.equal(r.status, 200);
+    assert.equal(typeof (await r.json()).answer, 'string');
+    const bad = await fetch(`${base}/api/guilds/g1/meetings/${id}/ask`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: '' }),
+    });
+    assert.equal(bad.status, 400);
+  } finally { close(); }
+});

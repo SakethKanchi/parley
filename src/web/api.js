@@ -4,6 +4,7 @@ import { ChannelType } from 'discord.js';
 import { getGuildConfig, setGuildConfig } from '../store/config.js';
 import { validateSetup, availableProviders } from '../commands/setup-logic.js';
 import { config as env } from '../config/env.js';
+import { askMeeting } from '../adapters/summarizer/ask.js';
 
 function guildName(client, id) {
   return client?.guilds?.cache?.get(id)?.name || id;
@@ -74,6 +75,23 @@ export function apiRouter({ db, client }) {
     if (!result.ok) return res.status(400).json({ error: result.error });
     const config = setGuildConfig(db, req.params.g, result.patch);
     res.json({ ok: true, config });
+  });
+
+  r.post('/guilds/:g/meetings/:id/ask', async (req, res) => {
+    const id = Number(req.params.id);
+    const meeting = db.getMeeting(id);
+    if (!meeting) return res.status(404).json({ error: 'meeting not found' });
+    const question = (req.body?.question || '').trim();
+    if (!question) return res.status(400).json({ error: 'question required' });
+    const transcript = db.listUtterances(id).map((u) => `${u.display_name}: ${u.text}`).join('\n');
+    try {
+      const answer = await askMeeting({
+        cfg: getGuildConfig(db, meeting.guild_id), env, question, transcript,
+        meta: { channelName: meeting.channel_name, date: meeting.started_at,
+          attendees: db.listAttendees(id).map((a) => a.display_name) },
+      });
+      res.json({ answer });
+    } catch (e) { res.status(502).json({ error: e.message }); }
   });
 
   return r;

@@ -4,23 +4,6 @@ import { useTheme } from '../ThemeContext.jsx';
 import MeetingsRail from './MeetingsRail.jsx';
 
 /**
- * Minimal settings gear — 16×16, single path, currentColor so it inherits
- * the parent's text color without any extra Tailwind color class.
- */
-function GearIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M7.443 1.063A.5.5 0 0 1 7.9 1h.2a.5.5 0 0 1 .457.063l.496.372a.5.5 0 0 0 .396.09l.585-.13a.5.5 0 0 1 .509.221l.1.173a.5.5 0 0 1 .017.488l-.26.54a.5.5 0 0 0 .05.5l.36.48a.5.5 0 0 1 .06.506l-.1.173a.5.5 0 0 1-.431.258l-.6-.007a.5.5 0 0 0-.43.247l-.298.516a.5.5 0 0 1-.508.248l-.196-.04a.5.5 0 0 0-.518.234l-.148.256a.5.5 0 0 1-.507.247l-.196-.04a.5.5 0 0 0-.517.234l-.148.256A.5.5 0 0 1 6.1 7H5.9a.5.5 0 0 1-.457-.063L4.947 6.565a.5.5 0 0 0-.396-.09l-.585.13a.5.5 0 0 1-.509-.221l-.1-.173a.5.5 0 0 1-.017-.488l.26-.54a.5.5 0 0 0-.05-.5l-.36-.48a.5.5 0 0 1-.06-.506l.1-.173a.5.5 0 0 1 .431-.258l.6.007a.5.5 0 0 0 .43-.247l.298-.516a.5.5 0 0 1 .508-.248l.196.04a.5.5 0 0 0 .518-.234l.148-.256a.5.5 0 0 1 .507-.247l.196.04A.5.5 0 0 0 7.443 1.063z"
-      />
-      <path d="M8 5.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
-    </svg>
-  );
-}
-
-/**
  * Simpler, cleaner gear using a standard cog path that actually renders.
  */
 function SettingsIcon() {

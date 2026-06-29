@@ -7,13 +7,32 @@ const LANGS = [['auto', 'Auto-detect'], ['en', 'English'], ['de', 'German'], ['e
   ['it', 'Italian'], ['pt', 'Portuguese'], ['nl', 'Dutch'], ['ru', 'Russian'], ['ja', 'Japanese'], ['zh', 'Chinese']];
 const SUMMARY_LANGS = [['match', 'Match transcription'], ...LANGS.filter(([c]) => c !== 'auto')];
 
+// Sensible first-run defaults per provider so switching provider never leaves a
+// stale model from the previous provider stored (mirrors the DEFAULTS in src/store/config.js
+// for gemini; opencode fallback from src/adapters/summarizer/index.js).
+const PROVIDER_DEFAULTS = {
+  gemini: 'gemini-2.5-flash',
+  openai: 'gpt-4o-mini',
+  ollama: 'llama3',
+  opencode: 'deepseek-v4-flash',
+};
+
 const field = 'bg-panel border border-edge rounded-md px-2 py-1 text-sm w-full';
 
 export default function Setup() {
   const { guildId } = useGuild();
   const [data, setData] = useState(null);
   const [msg, setMsg] = useState('');
+  const [modelDraft, setModelDraft] = useState('');
+
   useEffect(() => { if (guildId) api.config(guildId).then(setData); }, [guildId]);
+
+  // Keep the controlled model input in sync whenever the server config changes
+  // (initial load, provider switch, or an explicit model save).
+  useEffect(() => {
+    if (data?.config) setModelDraft(data.config.summarizerModel);
+  }, [data?.config?.summarizerModel]);
+
   if (!guildId) return <div className="text-muted">No guilds yet.</div>;
   if (!data) return <div className="text-muted">Loading…</div>;
 
@@ -27,15 +46,30 @@ export default function Setup() {
     <div className="max-w-md space-y-4">
       <div>
         <label className="block text-sm text-muted mb-1">Summarizer provider</label>
-        <select className={field} value={c.summarizerProvider} onChange={(e) => save({ provider: e.target.value })}>
+        <select className={field} value={c.summarizerProvider}
+          onChange={(e) => {
+            const p = e.target.value;
+            // Always send a model valid for the new provider so the stored model
+            // is never silently left as a value from the previous provider.
+            save({ provider: p, model: PROVIDER_DEFAULTS[p] || '' });
+          }}>
           {providers.map((p) => <option key={p.provider} value={p.provider} disabled={!p.ok}>
             {p.provider}{p.ok ? '' : ` (set ${p.missing} in .env)`}</option>)}
         </select>
       </div>
       <div>
         <label className="block text-sm text-muted mb-1">Model</label>
-        <input className={field} defaultValue={c.summarizerModel}
-          onBlur={(e) => e.target.value !== c.summarizerModel && save({ provider: c.summarizerProvider, model: e.target.value })} />
+        <input className={field} value={modelDraft}
+          onChange={(e) => setModelDraft(e.target.value)}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v && v !== c.summarizerModel) {
+              save({ provider: c.summarizerProvider, model: v });
+            } else if (!v) {
+              // Don't save an empty model — reset the draft to what the server has.
+              setModelDraft(c.summarizerModel);
+            }
+          }} />
       </div>
       <div>
         <label className="block text-sm text-muted mb-1">Whisper model</label>

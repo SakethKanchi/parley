@@ -28,14 +28,18 @@
 ## 🎬 Demo
 
 <p align="center">
-  <video src="https://github.com/SakethKanchi/parley/raw/master/assets/parley-demo.mp4" controls muted width="820"></video>
+  <a href="https://github.com/SakethKanchi/parley/blob/master/assets/parley-demo.mp4">
+    <img src="./assets/parley-demo-poster.png" width="820" alt="Watch the Parley demo — a live meeting becomes structured notes" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/SakethKanchi/parley/blob/master/assets/parley-demo.mp4"><b>▶ Watch the 20s demo</b></a>
 </p>
 
 <p align="center">
   <i>A live voice meeting becomes a per-speaker transcript, then structured notes — TL;DR, decisions, action items, talk-time — posted to a thread. All transcribed locally.</i>
 </p>
-
-> If the player doesn't load, [watch the demo here](https://github.com/SakethKanchi/parley/raw/master/assets/parley-demo.mp4).
 
 ---
 

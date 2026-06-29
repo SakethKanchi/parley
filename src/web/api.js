@@ -13,7 +13,10 @@ export function apiRouter({ db, client }) {
   const r = Router();
 
   r.get('/guilds', (_req, res) => {
-    res.json(db.listGuilds().map(({ guild_id }) => ({ id: guild_id, name: guildName(client, guild_id) })));
+    const fromDb = db.listGuilds().map(({ guild_id }) => guild_id);
+    const fromCache = client ? [...client.guilds.cache.values()].map((g) => g.id) : [];
+    const allIds = [...new Set([...fromDb, ...fromCache])];
+    res.json(allIds.map((id) => ({ id, name: guildName(client, id) })));
   });
 
   r.get('/guilds/:g/meetings', (req, res) => {

@@ -66,6 +66,33 @@ test('GET config returns providers + PATCH validates', async () => {
   } finally { close(); }
 });
 
+test('GET /api/guilds merges live client cache with db guilds (no duplicates)', async () => {
+  const db = openDb(':memory:');
+  // g1 is in db (from a meeting), g2 is only in the bot's guild cache
+  db.createMeeting({ guildId: 'g1', channelId: 'c', channelName: 'gen', startedAt: 'now' });
+
+  const stubCache = new Map([
+    ['g1', { id: 'g1', name: 'Guild One' }],
+    ['g2', { id: 'g2', name: 'Fresh Guild' }],
+  ]);
+  const stubClient = { guilds: { cache: stubCache } };
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api', apiRouter({ db, client: stubClient }));
+  const { base, close } = await listen(app);
+  try {
+    const guilds = await (await fetch(`${base}/api/guilds`)).json();
+    // Both guilds present, no duplicate for g1
+    assert.equal(guilds.length, 2);
+    const ids = guilds.map((g) => g.id).sort();
+    assert.deepEqual(ids, ['g1', 'g2']);
+    // Name is resolved via the cache when available
+    const g2 = guilds.find((g) => g.id === 'g2');
+    assert.equal(g2.name, 'Fresh Guild');
+  } finally { close(); }
+});
+
 test('GET /api/meetings/:id returns bundle', async () => {
   const db = openDb(':memory:');
   const id = db.createMeeting({ guildId: 'g1', channelId: 'c', channelName: 'gen', startedAt: 'now' });

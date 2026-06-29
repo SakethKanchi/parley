@@ -5,6 +5,7 @@ import Reading from './pages/Reading.jsx';
 import Todos from './pages/Todos.jsx';
 import Search from './pages/Search.jsx';
 import Setup from './pages/Setup.jsx';
+import ActionItems from './pages/ActionItems.jsx';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
             <Route index element={<Reading />} />
             <Route path="/meetings/:id" element={<Reading />} />
             <Route path="/todos" element={<Todos />} />
+            <Route path="/action-items" element={<ActionItems />} />
             <Route path="/search" element={<Search />} />
             <Route path="/setup" element={<Setup />} />
           </Route>

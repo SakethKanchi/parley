@@ -14,6 +14,7 @@ import { shouldAutoJoin, shouldAutoLeave } from './voice/decisions.js';
 import { validateSetup } from './commands/setup-logic.js';
 import { renderNotes, chunk } from './delivery/discord-notes.js';
 import { postNotes } from './delivery/post.js';
+import { startWebServer } from './web/server.js';
 
 validateEnv();
 const db = openDb(join(config.dataDir, 'meetings.db'));
@@ -162,6 +163,11 @@ client.once('ready', async () => {
   for (const m of db.findOrphanedMeetings()) {
     db.setMeetingStatus(m.id, 'transcription_failed');
     console.warn(`Orphaned meeting ${m.id} marked transcription_failed on boot.`);
+  }
+  if (process.env.WEB_UI) {
+    const port = Number(process.env.WEB_UI_PORT) || 3000;
+    startWebServer({ db, client, port });
+    console.log(`[web] admin UI on http://127.0.0.1:${port}`);
   }
 });
 

@@ -50,3 +50,17 @@
 /* ─── Base ──────────────────────────────────────────────────────────── */
 body { @apply bg-bg text-ink font-sans; }
 h1, h2, h3 { @apply font-display; }
+
+/* ─── Note cross-fade — replays on meeting switch via key= ─────────── */
+@keyframes note-fade-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.note-enter {
+  animation: note-fade-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-enter { animation: none; }
+}

@@ -17,6 +17,7 @@
 
 <p align="center">
   <a href="https://sakethkanchi.github.io/parley-landing/"><b>🌐 Website</b></a> ·
+  <a href="#-demo"><b>🎬 Demo</b></a> ·
   <a href="#-installation"><b>🚀 Install</b></a> ·
   <a href="#-commands"><b>💬 Commands</b></a> ·
   <a href="#-privacy--consent"><b>🔒 Privacy</b></a>
@@ -24,10 +25,25 @@
 
 ---
 
+## 🎬 Demo
+
+<p align="center">
+  <video src="https://github.com/SakethKanchi/parley/raw/master/assets/parley-demo.mp4" controls muted width="820"></video>
+</p>
+
+<p align="center">
+  <i>A live voice meeting becomes a per-speaker transcript, then structured notes — TL;DR, decisions, action items, talk-time — posted to a thread. All transcribed locally.</i>
+</p>
+
+> If the player doesn't load, [watch the demo here](https://github.com/SakethKanchi/parley/raw/master/assets/parley-demo.mp4).
+
+---
+
 A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Audio is transcribed locally — only the final transcript text ever leaves your machine (to the summarizer you choose, or nowhere at all if you run a local model). No SaaS account, no per-seat pricing, no cloud recording.
 
 ## Table of contents
 
+- [Demo](#-demo)
 - [Features](#-features)
 - [How it works](#-how-it-works)
 - [Prerequisites](#-prerequisites)

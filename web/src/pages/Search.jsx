@@ -32,7 +32,7 @@ function ResultRow({ row }) {
         <span className="text-sm font-semibold text-ink">{row.display_name}</span>
         <Link
           to={`/meetings/${row.meeting_id}`}
-          className="text-xs text-muted hover:text-ink transition-colors duration-150 shrink-0"
+          className="text-xs text-muted hover:text-ink transition-colors duration-150 shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
         >
           View meeting →
         </Link>
@@ -68,7 +68,9 @@ export default function Search() {
     if (!q || !guildId) {
       setRows([]);
       setLoading(false);
-      setSearched(Boolean(q));
+      // Only mark as "searched" when a guild is present — prevents the
+      // "No matches" empty-state flashing before a guild loads.
+      setSearched(guildId ? Boolean(q) : false);
       return;
     }
     let stale = false;
@@ -106,7 +108,7 @@ export default function Search() {
         </h1>
         <Link
           to="/"
-          className="text-xs text-muted hover:text-ink transition-colors duration-150"
+          className="text-xs text-muted hover:text-ink transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
         >
           ← Back to note
         </Link>
@@ -137,6 +139,7 @@ export default function Search() {
             'hover:opacity-90',
             'disabled:opacity-40 disabled:cursor-not-allowed',
             'transition-opacity duration-150',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1',
           ].join(' ')}
         >
           Search
@@ -155,15 +158,20 @@ export default function Search() {
 
       {/* Empty */}
       {!loading && !error && searched && rows.length === 0 && (
-        <p className="text-sm text-muted">
-          No matches{urlQ ? ` for "${urlQ}"` : ''}.
-        </p>
+        <div className="py-12 text-center">
+          <p className="text-sm font-medium text-ink">
+            No matches{urlQ ? ` for "${urlQ}"` : ''}
+          </p>
+          <p className="text-sm text-muted mt-1.5 max-w-[38ch] mx-auto leading-relaxed">
+            Try different keywords or a shorter phrase.
+          </p>
+        </div>
       )}
 
       {/* Results */}
       {!loading && !error && rows.length > 0 && (
         <>
-          <p className="text-[11px] font-semibold text-muted uppercase tracking-widest mb-3">
+          <p className="text-xs text-muted mb-3">
             {rows.length} {rows.length === 1 ? 'result' : 'results'}
           </p>
           <ul className="divide-y divide-edge" role="list">

@@ -50,7 +50,7 @@ export default function Layout() {
           <span className="text-xs text-muted">{error}</span>
         ) : (
           <select
-            className="bg-transparent border-0 text-sm text-muted focus:outline-none cursor-pointer max-w-[180px] py-0"
+            className="bg-transparent border-0 text-sm text-muted focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm cursor-pointer max-w-[180px] py-0"
             value={guildId || ''}
             onChange={(e) => setGuildId(e.target.value)}
             aria-label="Select guild"
@@ -69,7 +69,7 @@ export default function Layout() {
           {/* Theme toggle — plain text character, no border */}
           <button
             onClick={toggle}
-            className="text-muted hover:text-ink transition-colors duration-150 text-[14px] leading-none bg-transparent border-0 cursor-pointer p-0"
+            className="text-muted hover:text-ink transition-colors duration-150 text-[14px] leading-none bg-transparent border-0 cursor-pointer p-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {theme === 'dark' ? '☾' : '☀'}
@@ -79,7 +79,7 @@ export default function Layout() {
           <NavLink
             to="/action-items"
             className={({ isActive }) =>
-              `text-sm leading-none transition-colors duration-150 no-underline ${
+              `text-sm leading-none transition-colors duration-150 no-underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm ${
                 isActive ? 'text-ink' : 'text-muted hover:text-ink'
               }`
             }
@@ -90,7 +90,7 @@ export default function Layout() {
           {/* Gear — icon link to setup */}
           <Link
             to="/setup"
-            className="text-muted hover:text-ink transition-colors duration-150 flex items-center"
+            className="text-muted hover:text-ink transition-colors duration-150 flex items-center focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
             aria-label="Setup"
           >
             <SettingsIcon />

@@ -31,7 +31,8 @@
  *   - panel #E8EAF2: sidebar / panel surface (OKLCH ~93% L)
  *   - panel-2 #DEE0EC: nested panel (OKLCH ~90% L)
  *   - primary #4755E6: same 265° hue, darkened to ~46% L → white text 5.6:1 ✓
- *   - accent #1A964A: same 155° hue, darkened to ~52% L → readable on light surfaces ✓
+ *   - accent #0B7830: 155° hue, darkened to WCAG L ~0.137 → 5.2:1 on bg ✓
+ *     (original #1A964A only achieved 3.5:1 — WCAG AA fail; fixed here)
  *   - ink #0F1018: near-black 12% L, blue tint → 17:1 on bg ✓
  *   - muted #565B73: 44% L blue-grey → 6:1 on bg, passes WCAG AA ✓
  *   - edge #C5C7D8: cool border (OKLCH ~84% L)
@@ -42,7 +43,7 @@
   --panel:       #E8EAF2;
   --panel-2:     #DEE0EC;
   --primary:     #4755E6;
-  --accent:      #1A964A;
+  --accent:      #0B7830;
   --ink:         #0F1018;
   --muted:       #565B73;
   --edge:        #C5C7D8;
@@ -51,7 +52,7 @@
 
 /* ─── Base ──────────────────────────────────────────────────────────── */
 body { @apply bg-bg text-ink font-sans; }
-h1, h2, h3 { @apply font-display; }
+h1, h2, h3 { @apply font-display; text-wrap: balance; }
 
 /* ─── Note cross-fade — replays on meeting switch via key= ─────────── */
 @keyframes note-fade-in {

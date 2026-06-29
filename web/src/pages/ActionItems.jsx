@@ -117,7 +117,7 @@ function TodoRow({ todo, onToggle }) {
           </span>
           <Link
             to={`/meetings/${todo.meeting_id}`}
-            className="text-xs text-muted hover:text-ink transition-colors duration-150"
+            className="text-xs text-muted hover:text-ink transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
           >
             View meeting
           </Link>

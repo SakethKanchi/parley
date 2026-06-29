@@ -90,7 +90,7 @@ function Section({ label, children }) {
   return (
     <section className="mt-8">
       {label && (
-        <h2 className="text-[11px] font-semibold text-muted uppercase tracking-widest mb-3">
+        <h2 className="text-xs font-semibold text-muted mb-3">
           {label}
         </h2>
       )}
@@ -200,7 +200,7 @@ function Transcript({ utterances }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex items-center gap-1.5 text-xs text-muted hover:text-ink transition-colors duration-150"
+        className="flex items-center gap-1.5 text-xs text-muted hover:text-ink transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
       >
         <span
           className="inline-block transition-transform duration-200 select-none"
@@ -283,6 +283,7 @@ function AskBox({ guildId, meetingId }) {
             'hover:opacity-90',
             'disabled:opacity-40 disabled:cursor-not-allowed',
             'transition-opacity duration-150',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1',
           ].join(' ')}
         >
           {loading ? 'Asking…' : 'Ask'}

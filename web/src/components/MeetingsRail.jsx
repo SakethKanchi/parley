@@ -94,9 +94,6 @@ export default function MeetingsRail() {
         />
       </form>
 
-      {/* Hairline separator between search and list */}
-      <div className="border-b border-edge mx-0 mt-2" />
-
       {/* Meeting list */}
       <nav className="flex-1 overflow-y-auto" aria-label="Meeting list">
 
@@ -122,6 +119,7 @@ export default function MeetingsRail() {
               className={[
                 'flex flex-col gap-0.5 px-3 py-2.5 no-underline',
                 'transition-colors duration-150',
+                'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-inset',
                 isActive
                   ? 'bg-panel-2'
                   : 'hover:bg-panel',

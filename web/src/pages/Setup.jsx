@@ -27,7 +27,7 @@ const field = [
 
 function SectionLabel({ children }) {
   return (
-    <h2 className="text-[11px] font-semibold text-muted uppercase tracking-widest mb-3 mt-7 first:mt-0">
+    <h2 className="text-xs font-semibold text-muted mb-3 mt-7 first:mt-0">
       {children}
     </h2>
   );
@@ -50,8 +50,24 @@ export default function Setup() {
     if (data?.config) setModelDraft(data.config.summarizerModel);
   }, [data?.config?.summarizerModel]);
 
-  if (!guildId) return <div className="text-sm text-muted">No guilds yet.</div>;
-  if (!data) return <div className="text-sm text-muted">Loading…</div>;
+  if (!guildId) return (
+    <div className="flex flex-col items-center justify-center min-h-64 text-center py-20">
+      <p className="text-sm text-muted">No guild selected.</p>
+    </div>
+  );
+  if (!data) return (
+    <div className="max-w-[72ch] mx-auto pt-2">
+      <div className="animate-pulse max-w-sm space-y-5">
+        <div className="h-6 bg-panel rounded w-20 mb-8" />
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="space-y-1.5">
+            <div className="h-2.5 bg-panel rounded w-24" />
+            <div className="h-8 bg-panel rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   const { config: c, providers, channels } = data;
   const save = async (patch) => {

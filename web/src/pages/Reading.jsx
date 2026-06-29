@@ -108,7 +108,7 @@ function ActionItem({ item, todo }) {
   // Sync if the todo prop itself changes (e.g. todos refetch)
   useEffect(() => {
     if (todo) setDone(Boolean(todo.done));
-  }, [todo?.id, todo?.done]);
+  }, [todo]);
 
   async function handleChange() {
     if (!todo || busy) return;
@@ -158,7 +158,7 @@ function ActionItems({ items, todos, meetingId }) {
     <ul className="space-y-2.5">
       {items.map((item, i) => {
         const todo = meetingTodos.find((t) => t.task === item.task) ?? null;
-        return <ActionItem key={i} item={item} todo={todo} />;
+        return <ActionItem key={item.task} item={item} todo={todo} />;
       })}
     </ul>
   );
@@ -290,7 +290,7 @@ function AskBox({ guildId, meetingId }) {
       </form>
 
       {error && (
-        <p className="mt-3 text-sm text-red-400 leading-relaxed" role="alert">
+        <p className="mt-3 text-sm text-error leading-relaxed" role="alert">
           {error}
         </p>
       )}
@@ -443,15 +443,18 @@ export default function Reading() {
   // Fetch meetings list whenever guild changes (needed for redirect)
   useEffect(() => {
     if (!guildId) { setMeetings([]); return; }
+    let stale = false;
     setMeetings(null);
     api.meetings(guildId)
-      .then((rows) => setMeetings(Array.isArray(rows) ? rows : []))
-      .catch(() => setMeetings([]));
+      .then((rows) => { if (!stale) setMeetings(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!stale) setMeetings([]); });
+    return () => { stale = true; };
   }, [guildId]);
 
   // Fetch meeting detail + todos when id or guild changes
   useEffect(() => {
     if (!id || !guildId) { setData(null); setTodos([]); return; }
+    let stale = false;
     setDetailLoading(true);
     setDetailError(null);
     setData(null);
@@ -460,13 +463,16 @@ export default function Reading() {
       api.todos(guildId),
     ])
       .then(([meetingData, todosData]) => {
+        if (stale) return;
         setData(meetingData);
         setTodos(Array.isArray(todosData) ? todosData : []);
       })
       .catch((err) => {
+        if (stale) return;
         setDetailError(err?.message || 'Failed to load meeting');
       })
-      .finally(() => setDetailLoading(false));
+      .finally(() => { if (!stale) setDetailLoading(false); });
+    return () => { stale = true; };
   }, [id, guildId]);
 
   /* ── index route: redirect to latest meeting ── */

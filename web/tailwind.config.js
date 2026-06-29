@@ -14,6 +14,7 @@ export default {
         ink: 'var(--ink)',
         muted: 'var(--muted)',
         edge: 'var(--edge)',
+        error: 'var(--error)',
       },
       fontFamily: {
         display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'system-ui', 'sans-serif'],

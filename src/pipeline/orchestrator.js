@@ -42,6 +42,7 @@ export async function processMeeting(db, meetingId, opts) {
 
   const modelUsed = `${opts.cfg.summarizerProvider}:${opts.cfg.summarizerModel || ''}`;
   db.saveSummary(meetingId, notes, talktime, modelUsed);
+  db.seedTodos(meetingId, meeting.guild_id, notes.actionItems || []);
   db.setMeetingStatus(meetingId, 'done', new Date().toISOString());
 
   if (opts.deliver) await opts.deliver(notes, talktime, meta);

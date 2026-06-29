@@ -21,6 +21,14 @@ export async function processMeeting(db, meetingId, opts) {
   }
   for (const u of utterances) db.addUtterance({ meetingId, ...u });
 
+  // Nobody actually spoke (bot joined an empty/near-silent channel). Don't
+  // summarize or deliver — signal the caller to discard the meeting so these
+  // empties never clutter the archive.
+  if (utterances.length === 0) {
+    db.setMeetingStatus(meetingId, 'empty');
+    return { notes: null, talktime: [], empty: true };
+  }
+
   const transcript = buildTranscript(utterances);
   const talktime = computeTalkTime(utterances);
   const attendees = db.listAttendees(meetingId).map((a) => a.display_name);

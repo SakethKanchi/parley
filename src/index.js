@@ -40,7 +40,7 @@ const manager = new MeetingManager({
     const meeting = db.getMeeting(meetingId);
     const cfg = getGuildConfig(db, meeting.guild_id);
     try {
-      await processMeeting(db, meetingId, {
+      const result = await processMeeting(db, meetingId, {
         tracks,
         cfg,
         summarizer: getSummarizer(cfg),
@@ -48,6 +48,8 @@ const manager = new MeetingManager({
       });
       // Success: delete the meeting's audio. On failure we keep the PCM for manual retry.
       await rm(session.audioDir, { recursive: true, force: true }).catch(() => {});
+      // Nobody spoke — drop the empty meeting record entirely.
+      if (result?.empty) db.deleteMeeting(meetingId);
     } catch (err) {
       console.error(`Meeting ${meetingId} failed:`, err.message);
       const reason = err.userMessage || err.message;

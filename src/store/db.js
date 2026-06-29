@@ -22,6 +22,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS utterances_fts USING fts5(
 CREATE TRIGGER IF NOT EXISTS utterances_ai AFTER INSERT ON utterances BEGIN
   INSERT INTO utterances_fts(rowid, text, meeting_id) VALUES (new.id, new.text, new.meeting_id);
 END;
+CREATE TRIGGER IF NOT EXISTS utterances_ad AFTER DELETE ON utterances BEGIN
+  INSERT INTO utterances_fts(utterances_fts, rowid, text, meeting_id) VALUES ('delete', old.id, old.text, old.meeting_id);
+END;
 CREATE TABLE IF NOT EXISTS summaries (
   meeting_id INTEGER PRIMARY KEY,
   notes_json TEXT, talktime_json TEXT, model_used TEXT, created_at TEXT
@@ -47,6 +50,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS todos_dedup ON todos(meeting_id, COALESCE(assi
 export function openDb(path) {
   const sql = new DatabaseSync(path);
   sql.exec('PRAGMA journal_mode = WAL');
+  // Wait up to 5s for a held write lock instead of failing instantly with
+  // SQLITE_BUSY ("database is locked"). WAL gives many readers + one writer;
+  // this covers brief writer/writer or writer/checkpoint overlap (e.g. the web
+  // UI reading while the bot writes on meeting-end). ponytail: 5s ceiling, not a
+  // fix for two concurrent bot instances — run one.
+  sql.exec('PRAGMA busy_timeout = 5000');
   sql.exec(SCHEMA);
 
   // Migration: add summary_language to dbs created before the column existed.
@@ -65,12 +74,63 @@ export function openDb(path) {
       return r.lastInsertRowid;
     },
     getMeeting(id) { return sql.prepare(`SELECT * FROM meetings WHERE id = ?`).get(id); },
+    // Remove a meeting and everything attached to it. The AFTER DELETE trigger
+    // on utterances keeps the FTS index in sync. Audio files are removed by the
+    // caller (db layer has no fs). Wrapped in a transaction — all or nothing.
+    deleteMeeting(id) {
+      sql.exec('BEGIN');
+      try {
+        sql.prepare(`DELETE FROM utterances WHERE meeting_id = ?`).run(id);
+        sql.prepare(`DELETE FROM attendees WHERE meeting_id = ?`).run(id);
+        sql.prepare(`DELETE FROM summaries WHERE meeting_id = ?`).run(id);
+        sql.prepare(`DELETE FROM todos WHERE meeting_id = ?`).run(id);
+        sql.prepare(`DELETE FROM meetings WHERE id = ?`).run(id);
+        sql.exec('COMMIT');
+      } catch (e) {
+        sql.exec('ROLLBACK');
+        throw e;
+      }
+    },
+    // Move all utterances + attendees from sourceIds into targetId, then delete
+    // the source meetings (and their summaries/todos). Re-summarizing the merged
+    // transcript is the caller's job. Returns the ids actually merged.
+    mergeMeetings(targetId, sourceIds) {
+      const sources = (sourceIds || []).map(Number).filter((s) => s && s !== targetId);
+      if (sources.length === 0) return [];
+      const placeholders = sources.map(() => '?').join(',');
+      sql.exec('BEGIN');
+      try {
+        sql.prepare(`UPDATE utterances SET meeting_id = ? WHERE meeting_id IN (${placeholders})`).run(targetId, ...sources);
+        // Carry over attendees not already on the target.
+        sql.prepare(
+          `INSERT OR IGNORE INTO attendees (meeting_id, user_id, display_name)
+           SELECT ?, user_id, display_name FROM attendees WHERE meeting_id IN (${placeholders})`
+        ).run(targetId, ...sources);
+        sql.prepare(`DELETE FROM attendees WHERE meeting_id IN (${placeholders})`).run(...sources);
+        sql.prepare(`DELETE FROM summaries WHERE meeting_id IN (${placeholders})`).run(...sources);
+        sql.prepare(`DELETE FROM todos WHERE meeting_id IN (${placeholders})`).run(...sources);
+        sql.prepare(`DELETE FROM meetings WHERE id IN (${placeholders})`).run(...sources);
+        sql.exec('COMMIT');
+      } catch (e) {
+        sql.exec('ROLLBACK');
+        throw e;
+      }
+      return sources;
+    },
+    // Drop a meeting's existing summary + auto-seeded todos (before re-summarizing on merge).
+    clearSummary(meetingId) {
+      sql.prepare(`DELETE FROM summaries WHERE meeting_id = ?`).run(meetingId);
+      sql.prepare(`DELETE FROM todos WHERE meeting_id = ?`).run(meetingId);
+    },
     setMeetingStatus(id, status, endedAt = null) {
       sql.prepare(`UPDATE meetings SET status = ?, ended_at = COALESCE(?, ended_at) WHERE id = ?`)
         .run(status, endedAt, id);
     },
     listRecent(guildId, limit = 10) {
-      return sql.prepare(`SELECT * FROM meetings WHERE guild_id = ? ORDER BY id DESC LIMIT ?`).all(guildId, limit);
+      return sql.prepare(
+        `SELECT m.*, (SELECT COUNT(*) FROM utterances u WHERE u.meeting_id = m.id) AS utterance_count
+         FROM meetings m WHERE m.guild_id = ? ORDER BY m.id DESC LIMIT ?`
+      ).all(guildId, limit);
     },
     findOrphanedMeetings() {
       return sql.prepare(`SELECT * FROM meetings WHERE status IN ('recording','processing') ORDER BY id`).all();

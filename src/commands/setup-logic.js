@@ -3,7 +3,7 @@ import { LANGUAGE_CODES, SUMMARY_LANGUAGE_VALUES } from '../adapters/summarizer/
 
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large-v3', 'large-v3-turbo'];
 
-function providerKeyPresent(provider, env) {
+export function providerKeyPresent(provider, env) {
   if (provider === 'gemini') return { ok: !!env.gemini.apiKey, missing: 'GEMINI_API_KEY' };
   if (provider === 'openai') return { ok: !!env.openai.apiKey, missing: 'OPENAI_API_KEY' };
   if (provider === 'opencode') return { ok: !!env.opencode.apiKey, missing: 'OPENCODE_API_KEY' };
@@ -52,3 +52,7 @@ export function validateSetup(input, env) {
 }
 
 export { WHISPER_MODELS };
+
+export function availableProviders(env) {
+  return SUPPORTED_PROVIDERS.map((provider) => ({ provider, ...providerKeyPresent(provider, env) }));
+}

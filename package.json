@@ -8,7 +8,9 @@
     "start": "node --env-file=.env src/index.js",
     "test": "node --env-file-if-exists=.env --test",
     "sidecar": "stt_sidecar/.venv/bin/python stt_sidecar/server.py",
-    "make:art": "node scripts/make-brand-art.mjs"
+    "make:art": "node scripts/make-brand-art.mjs",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web install && npm --prefix web run build"
   },
   "license": "ISC",
   "engines": {

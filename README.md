@@ -230,6 +230,22 @@ All providers return the same structured-notes shape, so output is consistent re
 - Audio is transcribed **on the machine running the bot**. No audio is uploaded anywhere; only the final transcript text is sent to your chosen summarizer (and nothing leaves your network at all with Ollama).
 - Recording people's voices is subject to consent laws that vary by jurisdiction (some require all-party consent). **You are responsible for obtaining consent from all participants.**
 
+## Web admin UI (local)
+
+Run `npm run web:build` once, then start the bot with the UI enabled:
+
+    WEB_UI=1 npm start
+
+Open http://127.0.0.1:3000 to browse meetings, work the TODO list, search
+transcripts, and edit per-guild config.
+
+**Security:** the UI binds to 127.0.0.1 only and has NO authentication. Do not
+port-forward or reverse-proxy it to the internet without adding auth first. It
+never accepts or displays API keys — those stay in `.env`.
+
+For UI development with hot reload run `npm run web:dev` (proxies `/api` to the
+bot on port 3000) in a second terminal while the bot runs with `WEB_UI=1`.
+
 ## 🛠️ Development
 
 ```bash

@@ -30,7 +30,16 @@ export function apiRouter({ db, client }) {
   });
 
   r.get('/guilds/:g/meetings', (req, res) => {
-    res.json(db.listRecent(req.params.g, 50));
+    res.json(db.listRecentRich(req.params.g, 100));
+  });
+
+  // Dashboard aggregates — headline stats, talk-time leaderboard, timeline.
+  r.get('/guilds/:g/stats', (req, res) => {
+    res.json({
+      stats: db.guildStats(req.params.g),
+      leaderboard: db.talkTimeLeaderboard(req.params.g),
+      timeline: db.meetingsTimeline(req.params.g, 30),
+    });
   });
 
   r.get('/meetings/:id', (req, res) => {

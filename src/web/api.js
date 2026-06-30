@@ -12,6 +12,8 @@ import { buildTranscript, computeTalkTime } from '../pipeline/summarize.js';
 import { resolveSummaryLanguage } from '../adapters/summarizer/languages.js';
 import { MODEL_SUGGESTIONS, fetchOllamaModels } from '../adapters/summarizer/models.js';
 import { secretStatus, setProviderKey, isSecretProvider, connectionStatus, setConnection } from '../store/secrets.js';
+import { COMMAND_CATALOG } from '../commands/definitions.js';
+import { retryMeeting, retryPlan, RETRYABLE_STATUSES } from '../pipeline/retry.js';
 
 function audioDir(id) {
   return join(env.dataDir, 'audio', String(id));
@@ -55,12 +57,38 @@ export function apiRouter({ db, bot = null, client = null }) {
     const id = Number(req.params.id);
     const meeting = db.getMeeting(id);
     if (!meeting) return res.status(404).json({ error: 'meeting not found' });
+    const plan = retryPlan(db, id, { dataDir: env.dataDir });
     res.json({
       meeting,
       summary: db.getSummary(id),
       attendees: db.listAttendees(id),
       utterances: db.listUtterances(id),
+      retry: { eligible: RETRYABLE_STATUSES.has(meeting.status) && plan.ok, action: plan.action, reason: plan.reason || null },
     });
+  });
+
+  // Retry a failed/stuck meeting: re-summarize if the transcript survived, else
+  // re-transcribe from the saved PCM. Posts to Discord too when a live client
+  // is attached. Returns the new status so the UI can refresh.
+  r.post('/meetings/:id/retry', async (req, res) => {
+    const id = Number(req.params.id);
+    const meeting = db.getMeeting(id);
+    if (!meeting) return res.status(404).json({ error: 'meeting not found' });
+    const c = liveClient();
+    const deliver = c
+      ? async (notes, talktime) => {
+          const cfg = getGuildConfig(db, meeting.guild_id);
+          const { postNotes } = await import('../delivery/post.js');
+          await postNotes({ client: c, meeting, cfg, notes, talktime });
+        }
+      : null;
+    try {
+      const result = await retryMeeting(db, id, { dataDir: env.dataDir, deliver });
+      if (!result.ok) return res.status(502).json({ error: result.reason || 'Retry failed.', ...result });
+      res.json({ ok: true, ...result, meeting: db.getMeeting(id) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   r.delete('/meetings/:id', async (req, res) => {
@@ -188,6 +216,11 @@ export function apiRouter({ db, bot = null, client = null }) {
   });
 
   // ── System / connection ─────────────────────────────────────────────────
+  // The slash-command reference for the dashboard's Commands page.
+  r.get('/commands', (_req, res) => {
+    res.json({ commands: COMMAND_CATALOG });
+  });
+
   // Overall onboarding + bot connection state for the UI. Never leaks secrets.
   r.get('/system/status', (_req, res) => {
     const c = liveClient();

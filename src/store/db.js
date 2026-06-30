@@ -303,7 +303,10 @@ export function openDb(path) {
           `SELECT display_name FROM attendees WHERE meeting_id = ? ORDER BY display_name`
         ).all(m.id).map((a) => a.display_name);
         return { ...m, tldr, topic_count, decision_count, talktime, attendee_names,
-          has_summary: notes_json != null };
+          has_summary: notes_json != null,
+          // Failed/stuck meetings the dashboard can offer a retry for. The
+          // detail endpoint refines this with a precise plan (audio on disk?).
+          failed: ['transcription_failed', 'summary_failed', 'processing'].includes(m.status) };
       });
     },
 

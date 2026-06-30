@@ -61,13 +61,21 @@ export function Sparkline({ data = [], height = 80, stroke = 'var(--primary)' })
             textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>{fmtDay(data[i].date)}</text>
         ))}
       </svg>
-      {hover != null && (
-        <div className="absolute -top-1 px-2 py-1 rounded-md bg-surface-2 border border-border text-[11px] text-ink shadow pointer-events-none whitespace-nowrap"
-          style={{ left: `${(pts[hover][0] / width) * 100}%`, transform: 'translate(-50%,-100%)' }}>
-          <span className="text-muted">{fmtDay(data[hover].date)}: </span>
-          <span className="font-semibold">{data[hover].count}</span>
-        </div>
-      )}
+      {hover != null && (() => {
+        const py = pts[hover][1];                 // point y in px (svg h == container h)
+        const flip = py < 34;                     // near the top → drop the tooltip below
+        return (
+          <div className="absolute px-2 py-1 rounded-md bg-surface-2 border border-border text-[11px] text-ink shadow pointer-events-none whitespace-nowrap z-20"
+            style={{
+              left: `${(pts[hover][0] / width) * 100}%`,
+              top: py,
+              transform: flip ? 'translate(-50%, 9px)' : 'translate(-50%, calc(-100% - 9px))',
+            }}>
+            <span className="text-muted">{fmtDay(data[hover].date)}: </span>
+            <span className="font-semibold">{data[hover].count}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -98,20 +106,26 @@ export function BarChart({ data = [], height = 180, color = 'var(--primary)' }) 
           ))}
           <div className="absolute inset-0 flex items-end gap-[3px]">
             {data.map((d, i) => {
-              const h = (d.count / max) * 100;
+              const h = d.count ? Math.max(4, (d.count / max) * 100) : 1.5;
               const active = hover === i;
+              const barTopPx = plotH * (1 - h / 100); // px from top of plot to bar top
+              const flip = barTopPx < 34;             // tall bar → drop tooltip inside, below its top
               return (
                 <div key={i} className="flex-1 relative flex items-end h-full"
                   onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
                   <div className="w-full rounded-t-[3px] transition-all"
                     style={{
-                      height: `${d.count ? Math.max(4, h) : 1.5}%`,
+                      height: `${h}%`,
                       background: d.count ? color : 'var(--surface-3)',
                       opacity: d.count ? (active ? 1 : 0.92) : 0.5,
                       filter: active ? 'brightness(1.15)' : 'none',
                     }} />
                   {active && d.count > 0 && (
-                    <div className="absolute left-1/2 -translate-x-1/2 -top-1 -translate-y-full px-2 py-1 rounded-md bg-surface-2 border border-border text-[11px] text-ink shadow whitespace-nowrap z-10">
+                    <div className="absolute left-1/2 px-2 py-1 rounded-md bg-surface-2 border border-border text-[11px] text-ink shadow whitespace-nowrap z-20 pointer-events-none"
+                      style={{
+                        top: barTopPx,
+                        transform: flip ? 'translate(-50%, 8px)' : 'translate(-50%, calc(-100% - 8px))',
+                      }}>
                       <div className="font-semibold">{d.count} meeting{d.count === 1 ? '' : 's'}</div>
                       <div className="text-muted">{fmtWeekday(d.date)} {fmtDay(d.date)}</div>
                     </div>

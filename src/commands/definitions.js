@@ -29,7 +29,7 @@ export function buildCommands() {
       .addStringOption((o) => o.setName('model').setDescription('Summarizer model name'))
       .addStringOption((o) => o.setName('stt_provider').setDescription('Speech-to-text provider')
         .addChoices(...STT_PROVIDERS.map((p) => ({ name: p, value: p }))))
-      .addStringOption((o) => o.setName('stt_model').setDescription('Cloud STT model (Groq/OpenAI)')
+      .addStringOption((o) => o.setName('stt_model').setDescription('Cloud STT model (OpenAI)')
         .addChoices(...STT_MODEL_CHOICES.map((m) => ({ name: m, value: m }))))
       .addStringOption((o) => o.setName('whisper_model').setDescription('Whisper model size (local sidecar)')
         .addChoices(...WHISPER_MODELS.map((m) => ({ name: m, value: m }))))
@@ -76,5 +76,6 @@ export const COMMAND_CATALOG = [
   { name: 'setup', category: 'Configuration', admin: true,
     args: '[provider] [model] [stt_provider] [stt_model] [whisper_model] [notes_channel] [thread] [autojoin] [language] [summary_language]',
     summary: 'Configure the bot for this server (admin only).',
-    detail: 'Set the summarizer provider/model, the speech-to-text provider (local sidecar, Groq, or OpenAI) and model, notes channel, threading, auto-join, and languages. You can also do all of this from this dashboard under Settings.' },
+    detail: 'Set the summarizer provider/model, the speech-to-text provider (local sidecar or OpenAI) and model, notes channel, threading, auto-join, and languages. You can also do all of this from this dashboard under Settings.' },
 ];
+;

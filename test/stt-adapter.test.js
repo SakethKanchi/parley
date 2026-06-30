@@ -50,16 +50,16 @@ test('normalize tolerates an empty/garbage body', () => {
 test('openai-compatible posts to /audio/transcriptions with bearer + verbose_json', async () => {
   const { fetchImpl, calls } = captureFetch([{ ok: true, status: 200, body: { text: 'hello', words: [{ word: 'hello', start: 0, end: 1 }] } }]);
   const stt = createOpenAICompatibleSTT(
-    { baseUrl: 'https://api.groq.com/openai/v1', apiKey: 'sk-test', label: 'Groq STT' },
+    { baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-test', label: 'OpenAI STT' },
     { fetchImpl, readFile: fakeRead },
   );
-  const out = await stt('/tmp/a.wav', { model: 'whisper-large-v3-turbo', language: 'en' });
+  const out = await stt('/tmp/a.wav', { model: 'whisper-1', language: 'en' });
   assert.equal(out.text, 'hello');
   assert.equal(out.words[0].end, 1);
-  assert.equal(calls[0].url, 'https://api.groq.com/openai/v1/audio/transcriptions');
+  assert.equal(calls[0].url, 'https://api.openai.com/v1/audio/transcriptions');
   assert.equal(calls[0].init.headers.Authorization, 'Bearer sk-test');
   const form = calls[0].init.body;
-  assert.equal(form.get('model'), 'whisper-large-v3-turbo');
+  assert.equal(form.get('model'), 'whisper-1');
   assert.equal(form.get('response_format'), 'verbose_json');
   assert.equal(form.get('language'), 'en');
 });
@@ -108,8 +108,7 @@ test('resolveSttModel uses whisperModel for sidecar', () => {
 });
 
 test('resolveSttModel uses sttModel for cloud, falling back to default', () => {
-  assert.equal(resolveSttModel({ sttProvider: 'groq', sttModel: 'whisper-large-v3' }), 'whisper-large-v3');
-  assert.equal(resolveSttModel({ sttProvider: 'groq' }), 'whisper-large-v3-turbo');
+  assert.equal(resolveSttModel({ sttProvider: 'openai', sttModel: 'gpt-4o-transcribe' }), 'gpt-4o-transcribe');
   assert.equal(resolveSttModel({ sttProvider: 'openai' }), 'whisper-1');
 });
 
@@ -121,12 +120,12 @@ test('getSTT returns sidecar transcriber by default', async () => {
   assert.equal(calls[0].url, 'http://side:8000/transcribe');
 });
 
-test('getSTT builds a Groq transcriber hitting groq base url', async () => {
+test('getSTT builds an OpenAI transcriber hitting the openai base url', async () => {
   const { fetchImpl, calls } = captureFetch([{ ok: true, status: 200, body: { text: 'g', words: [] } }]);
-  const stt = getSTT({ sttProvider: 'groq' }, { groq: { apiKey: 'gk' } }, { fetchImpl, readFile: fakeRead });
-  await stt('/tmp/a.wav', { model: 'whisper-large-v3-turbo' });
-  assert.match(calls[0].url, /api\.groq\.com\/openai\/v1\/audio\/transcriptions$/);
-  assert.equal(calls[0].init.headers.Authorization, 'Bearer gk');
+  const stt = getSTT({ sttProvider: 'openai' }, { openai: { apiKey: 'ok', baseUrl: 'https://api.openai.com/v1' } }, { fetchImpl, readFile: fakeRead });
+  await stt('/tmp/a.wav', { model: 'whisper-1' });
+  assert.match(calls[0].url, /api\.openai\.com\/v1\/audio\/transcriptions$/);
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer ok');
 });
 
 test('getSTT throws on an unknown provider', () => {
@@ -137,17 +136,16 @@ test('getSTT throws on an unknown provider', () => {
 
 test('sttProviderReady reflects key/url presence', () => {
   assert.equal(sttProviderReady('sidecar', { sttUrl: 'http://x' }).ok, true);
-  assert.equal(sttProviderReady('groq', { groq: { apiKey: 'k' } }).ok, true);
-  assert.equal(sttProviderReady('groq', { groq: {} }).ok, false);
+  assert.equal(sttProviderReady('openai', { openai: { apiKey: 'k' } }).ok, true);
   assert.equal(sttProviderReady('openai', { openai: { apiKey: '' } }).ok, false);
-  assert.equal(sttProviderReady('groq', {}).missing, 'GROQ_API_KEY');
+  assert.equal(sttProviderReady('openai', {}).missing, 'OPENAI_API_KEY');
 });
 
 test('availableSttProviders lists every provider with models + readiness', () => {
-  const list = availableSttProviders({ sttUrl: 'http://x', groq: { apiKey: 'k' }, openai: {} });
+  const list = availableSttProviders({ sttUrl: 'http://x', openai: { apiKey: 'k' } });
   assert.deepEqual(list.map((p) => p.provider), STT_PROVIDERS);
-  const groq = list.find((p) => p.provider === 'groq');
-  assert.equal(groq.ok, true);
-  assert.deepEqual(groq.models, STT_MODELS.groq);
-  assert.equal(list.find((p) => p.provider === 'openai').ok, false);
+  const openai = list.find((p) => p.provider === 'openai');
+  assert.equal(openai.ok, true);
+  assert.deepEqual(openai.models, STT_MODELS.openai);
+  assert.equal(list.find((p) => p.provider === 'sidecar').ok, true);
 });

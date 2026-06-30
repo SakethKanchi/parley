@@ -32,7 +32,7 @@ export function validateSetup(input, env) {
     patch.whisperModel = input.whisperModel;
   }
 
-  // Speech-to-text provider (sidecar | groq | openai). Selecting a cloud
+  // Speech-to-text provider (sidecar | openai). Selecting a cloud
   // provider requires its API key to be set, mirroring the summarizer checks.
   if (input.sttProvider !== undefined) {
     if (!STT_PROVIDERS.includes(input.sttProvider)) {

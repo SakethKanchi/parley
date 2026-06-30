@@ -4,7 +4,7 @@ import { unlink } from 'node:fs/promises';
 
 export async function transcribeTracks(tracks, cfg = {}, deps = {}) {
   const convert = deps.convert || convertPcmToWav;
-  // Resolve the configured STT provider (sidecar | groq | openai) once per
+  // Resolve the configured STT provider (sidecar | openai) once per
   // meeting. The provider default can be overridden via deps.stt in tests.
   const transcribe = getSTT(cfg, deps.env, deps.sttDeps);
   const model = resolveSttModel(cfg);

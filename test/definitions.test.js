@@ -19,12 +19,12 @@ test('setup command exposes provider/model/stt/whisper/thread/autojoin/channel/l
   assert.deepEqual(names, ['autojoin', 'language', 'model', 'notes_channel', 'provider', 'stt_model', 'stt_provider', 'summary_language', 'thread', 'whisper_model']);
 });
 
-test('stt_provider option offers sidecar and groq choices', () => {
+test('stt_provider option offers sidecar and openai choices', () => {
   const setup = commandsJSON().find((c) => c.name === 'setup');
   const stt = setup.options.find((o) => o.name === 'stt_provider');
   const values = stt.choices.map((c) => c.value);
   assert.ok(values.includes('sidecar'));
-  assert.ok(values.includes('groq'));
+  assert.ok(values.includes('openai'));
 });
 
 test('language option offers a German choice and auto', () => {

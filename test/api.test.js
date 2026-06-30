@@ -93,7 +93,7 @@ test('GET config includes sttProviders with the sidecar default', async () => {
   try {
     const cfg = await (await fetch(`${base}/api/guilds/g1/config`)).json();
     assert.ok(Array.isArray(cfg.sttProviders));
-    assert.deepEqual(cfg.sttProviders.map((p) => p.provider), ['sidecar', 'groq', 'openai']);
+    assert.deepEqual(cfg.sttProviders.map((p) => p.provider), ['sidecar', 'openai']);
     assert.equal(cfg.config.sttProvider, 'sidecar'); // default
   } finally { close(); }
 });
@@ -117,10 +117,11 @@ test('POST /system/sidecar start/stop drives the controller', async () => {
 
 test('switching a guild to a cloud STT provider auto-stops the sidecar', async () => {
   const db = openDb(':memory:');
-  // Make groq usable so validation passes (presence-only check).
-  process.env.GROQ_API_KEY = 'gsk_test';
+  // Make openai usable so validation passes (presence-only check).
+  process.env.OPENAI_API_KEY = 'sk_test';
   const { config: env } = await import('../src/config/env.js');
-  env.groq.apiKey = 'gsk_test';
+  const prevOpenai = env.openai.apiKey;
+  env.openai.apiKey = 'sk_test';
   const sidecar = fakeSidecar();
   await sidecar.start(); // pretend it was running
   sidecar.calls.length = 0;
@@ -128,10 +129,10 @@ test('switching a guild to a cloud STT provider auto-stops the sidecar', async (
   try {
     const r = await fetch(`${base}/api/guilds/g1/config`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sttProvider: 'groq' }),
+      body: JSON.stringify({ sttProvider: 'openai' }),
     });
     const body = await r.json();
-    assert.equal(body.config.sttProvider, 'groq');
+    assert.equal(body.config.sttProvider, 'openai');
     assert.equal(body.sidecar.state, 'stopped');
     assert.ok(sidecar.calls.includes('stop'));
 
@@ -142,7 +143,7 @@ test('switching a guild to a cloud STT provider auto-stops the sidecar', async (
     });
     assert.equal((await back.json()).sidecar.state, 'running');
     assert.ok(sidecar.calls.includes('start'));
-  } finally { close(); delete process.env.GROQ_API_KEY; env.groq.apiKey = undefined; }
+  } finally { close(); delete process.env.OPENAI_API_KEY; env.openai.apiKey = prevOpenai; }
 });
 
 test('GET /api/guilds merges live client cache with db guilds (no duplicates)', async () => {

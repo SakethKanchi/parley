@@ -15,18 +15,16 @@ const PROVIDER_DEFAULTS = {
   gemini: 'gemini-2.5-flash', openai: 'gpt-4o-mini', ollama: 'llama3', opencode: 'deepseek-v4-flash',
 };
 // Providers whose key is editable from the UI (Ollama is keyless/local).
-const KEYED = { gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', opencode: 'OPENCODE_API_KEY', groq: 'GROQ_API_KEY' };
+const KEYED = { gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', opencode: 'OPENCODE_API_KEY' };
 const KEY_HELP = {
   gemini: 'aistudio.google.com/apikey',
   openai: 'platform.openai.com/api-keys',
   opencode: 'opencode.ai/zen',
-  groq: 'console.groq.com/keys',
 };
 // Which env secret each STT provider needs (sidecar is keyless/local).
-const STT_KEY = { groq: 'groq', openai: 'openai' };
+const STT_KEY = { openai: 'openai' };
 const STT_HELP = {
   sidecar: 'Runs the local faster-whisper container. Free and fully offline, but uses your CPU.',
-  groq: 'Groq-hosted Whisper. Extremely fast and cheap (free tier). Skips running the local sidecar.',
   openai: 'OpenAI (or any OpenAI-compatible) transcription endpoint.',
 };
 

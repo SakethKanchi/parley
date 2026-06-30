@@ -69,9 +69,9 @@ test('sttProvider defaults to sidecar', () => {
 
 test('setGuildConfig persists sttProvider + sttModel', () => {
   const db = openDb(':memory:');
-  setGuildConfig(db, 'g', { sttProvider: 'groq', sttModel: 'whisper-large-v3-turbo' });
+  setGuildConfig(db, 'g', { sttProvider: 'openai', sttModel: 'whisper-1' });
   const c = getGuildConfig(db, 'g');
-  assert.equal(c.sttProvider, 'groq');
-  assert.equal(c.sttModel, 'whisper-large-v3-turbo');
+  assert.equal(c.sttProvider, 'openai');
+  assert.equal(c.sttModel, 'whisper-1');
   assert.equal(c.whisperModel, DEFAULTS.whisperModel); // sidecar model untouched
 });

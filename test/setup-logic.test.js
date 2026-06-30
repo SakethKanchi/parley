@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateSetup } from '../src/commands/setup-logic.js';
 
-const env = { gemini: { apiKey: 'g' }, openai: { apiKey: '' }, opencode: { apiKey: '' }, ollama: { url: 'http://x' }, groq: { apiKey: '' }, sttUrl: 'http://127.0.0.1:8000' };
+const env = { gemini: { apiKey: 'g' }, openai: { apiKey: '' }, opencode: { apiKey: '' }, ollama: { url: 'http://x' }, sttUrl: 'http://127.0.0.1:8000' };
 
 test('accepts gemini when key present', () => {
   const r = validateSetup({ provider: 'gemini', model: 'gemini-2.5-flash' }, env);
@@ -81,23 +81,23 @@ test('accepts sidecar STT provider without a key', () => {
   assert.equal(r.patch.sttProvider, 'sidecar');
 });
 
-test('rejects groq STT when GROQ_API_KEY missing', () => {
-  const r = validateSetup({ sttProvider: 'groq' }, env);
+test('rejects openai STT when OPENAI_API_KEY missing', () => {
+  const r = validateSetup({ sttProvider: 'openai' }, env);
   assert.equal(r.ok, false);
-  assert.match(r.error, /GROQ_API_KEY/);
+  assert.match(r.error, /OPENAI_API_KEY/);
 });
 
-test('accepts groq STT with key and a valid model', () => {
-  const r = validateSetup({ sttProvider: 'groq', sttModel: 'whisper-large-v3' }, { ...env, groq: { apiKey: 'k' } });
+test('accepts openai STT with key and a valid model', () => {
+  const r = validateSetup({ sttProvider: 'openai', sttModel: 'whisper-1' }, { ...env, openai: { apiKey: 'k' } });
   assert.equal(r.ok, true);
-  assert.equal(r.patch.sttProvider, 'groq');
-  assert.equal(r.patch.sttModel, 'whisper-large-v3');
+  assert.equal(r.patch.sttProvider, 'openai');
+  assert.equal(r.patch.sttModel, 'whisper-1');
 });
 
-test('rejects an invalid groq STT model', () => {
-  const r = validateSetup({ sttProvider: 'groq', sttModel: 'whisper-9000' }, { ...env, groq: { apiKey: 'k' } });
+test('rejects an invalid openai STT model', () => {
+  const r = validateSetup({ sttProvider: 'openai', sttModel: 'whisper-9000' }, { ...env, openai: { apiKey: 'k' } });
   assert.equal(r.ok, false);
-  assert.match(r.error, /groq model/i);
+  assert.match(r.error, /openai model/i);
 });
 
 test('rejects an unknown STT provider', () => {

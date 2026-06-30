@@ -2,11 +2,11 @@
 // Live smoke-test for the speech-to-text adapters. Transcribes a real audio
 // file through any configured provider and prints the result + timing.
 //
-//   node scripts/try-stt.mjs --provider groq [--model whisper-large-v3-turbo] [--file path] [--language auto]
+//   node scripts/try-stt.mjs --provider openai [--model whisper-1] [--file path] [--language auto]
 //   node scripts/try-stt.mjs --provider sidecar --model small --file audio/3/<id>.pcm
 //
 // With no --file it auto-picks the first .pcm under ./audio. Reads keys/urls
-// from your .env (GROQ_API_KEY, OPENAI_API_KEY, STT_URL). Accepts .pcm (16k
+// from your .env (OPENAI_API_KEY, STT_URL). Accepts .pcm (16k
 // mono s16le, converted to wav on the fly) or any audio file the provider takes.
 import { readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';

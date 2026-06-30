@@ -2,8 +2,9 @@ import { readFile as fsReadFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 
 // One adapter for every OpenAI-compatible speech-to-text endpoint
-// (POST {baseUrl}/audio/transcriptions). Groq and OpenAI both speak this exact
-// shape, so a single implementation covers them — only baseUrl/key/model differ.
+// (POST {baseUrl}/audio/transcriptions). OpenAI and other OpenAI-compatible
+// providers speak this exact shape, so a single implementation covers them —
+// only baseUrl/key/model differ.
 //
 // We always request `verbose_json` with word-level timestamps so the response
 // carries the same `{ text, words: [{ word, start, end }] }` our pipeline
@@ -12,7 +13,7 @@ export function createOpenAICompatibleSTT({ baseUrl, apiKey, label = 'STT' }, de
   const fetchImpl = deps.fetchImpl || fetch;
   const readFile = deps.readFile || fsReadFile;
   const retries = deps.retries ?? 1;
-  // Cloud transcription is fast (Groq ~200x realtime), but a cold connection or
+  // Cloud transcription is fast, but a cold connection or
   // a large file warrants headroom. Far below the sidecar's CPU-bound ceiling.
   const timeoutMs = deps.timeoutMs ?? 120_000;
   const url = `${String(baseUrl).replace(/\/+$/, '')}/audio/transcriptions`;
@@ -50,7 +51,7 @@ export function createOpenAICompatibleSTT({ baseUrl, apiKey, label = 'STT' }, de
   };
 }
 
-// Coerce an OpenAI/Groq transcription response into our { text, words } shape.
+// Coerce an OpenAI-compatible transcription response into our { text, words } shape.
 // Prefer top-level word timestamps; fall back to deriving them from segments so
 // downstream endMs math still works even if a provider omits the words array.
 export function normalize(json) {

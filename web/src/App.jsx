@@ -11,6 +11,7 @@ import Analytics from './pages/Analytics.jsx';
 import Search from './pages/Search.jsx';
 import Commands from './pages/Commands.jsx';
 import Setup from './pages/Setup.jsx';
+import NotFound from './pages/NotFound.jsx';
 
 function Gate() {
   const { status, loading } = useSystem();
@@ -39,6 +40,7 @@ function Gate() {
             <Route path="/search" element={<Search />} />
             <Route path="/commands" element={<Commands />} />
             <Route path="/setup" element={<Setup />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

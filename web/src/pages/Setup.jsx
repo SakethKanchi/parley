@@ -75,9 +75,9 @@ function Chevron() {
 /* ── API key editor ───────────────────────────────────────────────────────
    Shows a "set / not set" badge; lets the user paste a new key (saved to .env,
    applied live) or clear it. The value is never read back from the server. */
-function KeyEditor({ provider, present, onChanged }) {
+function KeyEditor({ provider, present, onChanged, autoEdit = false }) {
   const envVar = KEYED[provider];
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(autoEdit && !present);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [reveal, setReveal] = useState(false);
@@ -245,6 +245,11 @@ export default function Setup() {
   const [msgErr, setMsgErr] = useState(false);
   const [modelDraft, setModelDraft] = useState('');
   const [models, setModels] = useState([]); // suggestions for current provider
+  // "Draft" providers: when you pick a cloud provider that has no API key yet,
+  // we stage the choice (reveal its key field) WITHOUT saving — saving would be
+  // rejected server-side ("key not set"). Once the key is added we auto-commit.
+  const [sumDraft, setSumDraft] = useState(null);
+  const [sttDraft, setSttDraft] = useState(null);
   const listId = useRef(`models-${Math.random().toString(36).slice(2)}`).current;
 
   function reload() { if (guildId) api.config(guildId).then(setData).catch(() => setData(null)); }
@@ -283,14 +288,55 @@ export default function Setup() {
       // Switching the transcription backend may have auto-started/stopped the
       // local sidecar; refresh system status so its pill reflects reality.
       if (patch.sttProvider !== undefined) refreshSys?.();
-    } catch (e) { setMsg(e.message); setMsgErr(true); }
-    setTimeout(() => setMsg(''), 2400);
+      return true;
+    } catch (e) { setMsg(e.message); setMsgErr(true); return false; }
+    finally { setTimeout(() => setMsg(''), 2400); }
   };
   const sel = 'input appearance-none pr-9 cursor-pointer';
-  const keyed = Object.prototype.hasOwnProperty.call(KEYED, c.summarizerProvider);
-  // Cloud STT providers (groq/openai) expose an editable key + a model list.
-  const sttKeyed = Object.prototype.hasOwnProperty.call(STT_KEY, c.sttProvider);
-  const sttModels = (sttProviders || []).find((p) => p.provider === c.sttProvider)?.models || [];
+
+  // ── Summarizer provider, with draft-before-key handling ───────────────────
+  const sumProvider = sumDraft || c.summarizerProvider;        // shown in the <select>
+  const sumReady = (providers.find((p) => p.provider === sumProvider) || {}).ok;
+  const sumKeyed = Object.prototype.hasOwnProperty.call(KEYED, sumProvider);
+  function pickSummarizer(p) {
+    const ready = (providers.find((x) => x.provider === p) || {}).ok;
+    if (!ready && Object.prototype.hasOwnProperty.call(KEYED, p)) {
+      setSumDraft(p);              // stage it; reveal the key field, don't save yet
+      setMsg(''); 
+    } else {
+      setSumDraft(null);
+      save({ provider: p, model: PROVIDER_DEFAULTS[p] || '' });
+    }
+  }
+  // After a key lands for the staged provider, commit the switch.
+  async function commitSumKey() {
+    await reload();
+    if (sumDraft) { await save({ provider: sumDraft, model: PROVIDER_DEFAULTS[sumDraft] || '' }); setSumDraft(null); }
+  }
+
+  // ── Transcription provider, same pattern ──────────────────────────────────
+  const sttProvider = sttDraft || c.sttProvider;
+  const sttReady = (sttProviders || []).find((p) => p.provider === sttProvider)?.ok;
+  const sttKeyed = Object.prototype.hasOwnProperty.call(STT_KEY, sttProvider);
+  const sttModels = (sttProviders || []).find((p) => p.provider === sttProvider)?.models || [];
+  function pickStt(p) {
+    const sp = (sttProviders || []).find((x) => x.provider === p);
+    if (!sp?.ok && Object.prototype.hasOwnProperty.call(STT_KEY, p)) {
+      setSttDraft(p);              // stage it; reveal the key field, don't save yet
+      setMsg('');
+    } else {
+      setSttDraft(null);
+      save({ sttProvider: p, sttModel: p === 'sidecar' ? null : (sp?.models?.[0] ?? null) });
+    }
+  }
+  async function commitSttKey() {
+    await reload(); refreshSys?.();
+    if (sttDraft) {
+      const sp = (sttProviders || []).find((x) => x.provider === sttDraft);
+      await save({ sttProvider: sttDraft, sttModel: sp?.models?.[0] ?? null });
+      setSttDraft(null);
+    }
+  }
 
   return (
     <Page max="720px">
@@ -303,10 +349,10 @@ export default function Setup() {
       <div className="space-y-5">
         <ConnectionCard sys={sys} onChanged={refreshSys} />
         <Card title="Summarizer" desc="Which AI turns transcripts into structured notes.">
-          <Field label="Provider">
+          <Field label="Provider" hint={sumDraft ? 'Add the API key below to switch to this provider.' : undefined}>
             <div className="relative">
-              <select className={sel} value={c.summarizerProvider}
-                onChange={(e) => { const p = e.target.value; save({ provider: p, model: PROVIDER_DEFAULTS[p] || '' }); }}>
+              <select className={sel} value={sumProvider}
+                onChange={(e) => pickSummarizer(e.target.value)}>
                 {providers.map((p) => (
                   <option key={p.provider} value={p.provider}>
                     {p.provider}{p.ok ? '' : ' (no key set)'}
@@ -317,8 +363,9 @@ export default function Setup() {
             </div>
           </Field>
 
-          {keyed && <KeyEditor provider={c.summarizerProvider} present={!!secrets[c.summarizerProvider]} onChanged={reload} />}
+          {sumKeyed && <KeyEditor provider={sumProvider} present={!!secrets[sumProvider]} onChanged={commitSumKey} autoEdit={!!sumDraft} />}
 
+          {!sumDraft && (
           <Field label="Model" hint={models.length ? 'Pick a suggestion or type any model id the provider supports.' : 'Type the model id for the chosen provider.'}>
             <input className="input" value={modelDraft} list={listId}
               onChange={(e) => setModelDraft(e.target.value)}
@@ -340,18 +387,14 @@ export default function Setup() {
               </div>
             )}
           </Field>
+          )}
         </Card>
 
         <Card title="Transcription" desc="How spoken audio becomes text.">
-          <Field label="Provider" hint={STT_HELP[c.sttProvider] || ''}>
+          <Field label="Provider" hint={sttDraft ? 'Add the API key below to switch to this provider.' : (STT_HELP[sttProvider] || '')}>
             <div className="relative">
-              <select className={sel} value={c.sttProvider}
-                onChange={(e) => {
-                  const p = e.target.value;
-                  // Reset the cloud model to the provider's default when switching.
-                  const sp = (sttProviders || []).find((x) => x.provider === p);
-                  save({ sttProvider: p, sttModel: p === 'sidecar' ? null : (sp?.models?.[0] ?? null) });
-                }}>
+              <select className={sel} value={sttProvider}
+                onChange={(e) => pickStt(e.target.value)}>
                 {(sttProviders || []).map((p) => (
                   <option key={p.provider} value={p.provider}>
                     {p.label || p.provider}{p.ok ? '' : ' (no key set)'}
@@ -363,10 +406,10 @@ export default function Setup() {
           </Field>
 
           {sttKeyed && (
-            <KeyEditor provider={STT_KEY[c.sttProvider]} present={!!secrets[STT_KEY[c.sttProvider]]} onChanged={() => { reload(); refreshSys?.(); }} />
+            <KeyEditor provider={STT_KEY[sttProvider]} present={!!secrets[STT_KEY[sttProvider]]} onChanged={commitSttKey} autoEdit={!!sttDraft} />
           )}
 
-          {c.sttProvider === 'sidecar' ? (
+          {sttDraft ? null : c.sttProvider === 'sidecar' ? (
             <>
               <Field label="Whisper model" hint="Larger is more accurate but slower on CPU.">
                 <div className="relative">

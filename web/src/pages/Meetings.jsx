@@ -43,7 +43,7 @@ export default function Meetings() {
     let stale = false;
     setMeetings(null); setError(null); setChannel('__all__');
     api.meetings(guildId)
-      .then((rows) => { if (!stale) setMeetings((Array.isArray(rows) ? rows : []).filter((m) => (m.utterance_count ?? 1) > 0)); })
+      .then((rows) => { if (!stale) setMeetings((Array.isArray(rows) ? rows : []).filter((m) => (m.utterance_count ?? 1) > 0 || m.failed)); })
       .catch((e) => { if (!stale) setError(e?.message || 'Failed to load'); });
     return () => { stale = true; };
   }, [guildId]);

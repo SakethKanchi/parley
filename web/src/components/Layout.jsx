@@ -10,6 +10,7 @@ const NAV = [
   { to: '/action-items', label: 'Action items', icon: Icon.CheckSquare },
   { to: '/analytics', label: 'Analytics', icon: Icon.Chart },
   { to: '/search', label: 'Search', icon: Icon.Search },
+  { to: '/commands', label: 'Commands', icon: Icon.Terminal },
 ];
 
 function GuildSwitcher() {

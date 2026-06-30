@@ -28,6 +28,10 @@ export const Icon = {
   Hash: (p) => <I {...p}><path d="M5 9h14M5 15h14M9 4 7 20M17 4l-2 16" /></I>,
   Doc: (p) => <I {...p}><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z" /><path d="M14 3v5h5M8.5 13h7M8.5 17h7" /></I>,
   Calendar: (p) => <I {...p}><rect x="3.5" y="4.5" width="17" height="16" rx="2.5" /><path d="M3.5 9h17M8 2.5v4M16 2.5v4" /></I>,
+  Terminal: (p) => <I {...p}><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="m7 9 3 3-3 3M13 15h4" /></I>,
+  Slash: (p) => <I {...p}><path d="M9 20 15 4" /></I>,
+  Refresh: (p) => <I {...p}><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" /></I>,
+  Alert: (p) => <I {...p}><path d="M12 9v4M12 17h.01M10.3 4l-7.6 13A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z" /></I>,
 };
 
 /* ── Brand mark (the real Parley waveform → note logo) ──────────────────── */
@@ -101,6 +105,8 @@ export function StatusPill({ status }) {
     done: { label: 'Done', color: 'var(--accent)', bg: 'var(--accent-soft)' },
     recording: { label: 'Recording', color: 'var(--error)', bg: 'var(--error-soft)' },
     processing: { label: 'Processing', color: 'var(--warn)', bg: 'var(--warn-soft)' },
+    transcription_failed: { label: 'Transcription failed', color: 'var(--error)', bg: 'var(--error-soft)' },
+    summary_failed: { label: 'Summary failed', color: 'var(--error)', bg: 'var(--error-soft)' },
   };
   const s = map[status] || { label: status || 'Unknown', color: 'var(--muted)', bg: 'var(--surface-3)' };
   return (

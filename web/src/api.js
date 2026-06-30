@@ -20,6 +20,8 @@ export const api = {
   deleteMeeting: (id) => fetch(`/api/meetings/${id}`, { method: 'DELETE' }).then(json),
   mergeMeetings: (id, sourceIds) => fetch(`/api/meetings/${id}/merge`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceIds }) }).then(json),
   search: (g, q) => fetch(`/api/guilds/${g}/search?q=${encodeURIComponent(q)}`).then(json),
+  retryMeeting: (id) => fetch(`/api/meetings/${id}/retry`, { method: 'POST' }).then(json),
+  commands: () => fetch('/api/commands').then(json),
   config: (g) => fetch(`/api/guilds/${g}/config`).then(json),
   saveConfig: (g, patch) => fetch(`/api/guilds/${g}/config`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }).then(json),
   providerModels: (provider) => fetch(`/api/providers/${provider}/models`).then(json),

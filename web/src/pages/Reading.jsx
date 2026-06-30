@@ -5,6 +5,65 @@ import { useGuild } from '../GuildContext.jsx';
 import { Avatar, AvatarStack, Icon, Empty, TalkBar } from '../components/ui.jsx';
 import { fmtDateLong, fmtTime, fmtDuration, fmtClock, fmtMs, colorOf } from '../lib/format.js';
 
+/* ── retry banner (failed / stuck meetings) ───────────────────────────── */
+const STATUS_COPY = {
+  transcription_failed: {
+    title: 'Transcription failed',
+    body: 'The speech-to-text sidecar was unreachable or errored while transcribing this meeting. If the audio is still on disk, you can retry the whole pipeline.',
+  },
+  summary_failed: {
+    title: 'Summary failed',
+    body: 'The transcript was captured, but the summarizer errored (often a transient rate-limit or a missing API key). Retrying re-runs only the summary.',
+  },
+  processing: {
+    title: 'Stuck processing',
+    body: 'This meeting was left mid-process, likely because the bot restarted. Retry to finish it.',
+  },
+};
+
+function RetryBanner({ meeting, retry, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const copy = STATUS_COPY[meeting.status] || { title: 'Needs attention', body: `Status: ${meeting.status}.` };
+  const canRetry = retry?.eligible;
+
+  async function run() {
+    setBusy(true); setErr(null);
+    try {
+      const r = await api.retryMeeting(meeting.id);
+      if (!r.ok) { setErr(r.error || r.reason || 'Retry failed.'); }
+      else { onDone?.(); }
+    } catch (e) {
+      setErr(e?.message || 'Retry failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card p-5 mt-8 border-l-2" style={{ borderColor: 'var(--error)' }}>
+      <div className="flex items-start gap-3">
+        <Icon.Alert width={20} height={20} className="text-error shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold text-ink">{copy.title}</p>
+          <p className="text-[13.5px] text-muted leading-relaxed mt-1">{copy.body}</p>
+          {!canRetry && retry?.reason && <p className="text-[13px] text-error mt-2">{retry.reason}</p>}
+          {err && <p className="text-[13px] text-error mt-2">{err}</p>}
+          <div className="mt-3.5 flex items-center gap-2">
+            <button onClick={run} disabled={!canRetry || busy} className="btn btn-primary !py-2">
+              {busy ? (
+                <span className="inline-flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />Retrying…</span>
+              ) : (
+                <span className="inline-flex items-center gap-2"><Icon.Refresh width={15} height={15} />Retry {retry?.action === 'retranscribe' ? 'transcription' : 'summary'}</span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── action item (in-note, checkable) ─────────────────────────────────── */
 function ActionItem({ item, todo, onToggle }) {
   const [done, setDone] = useState(Boolean(todo?.done));
@@ -217,11 +276,12 @@ function MeetingNav({ meetings, id }) {
 }
 
 /* ── note document ────────────────────────────────────────────────────── */
-function Note({ data, todos, guildId, meetings, refetchTodos }) {
-  const { meeting, summary, attendees, utterances } = data;
+function Note({ data, todos, guildId, meetings, refetchTodos, onReload }) {
+  const { meeting, summary, attendees, utterances, retry } = data;
   const notes = summary?.notes;
   const duration = fmtDuration(meeting.started_at, meeting.ended_at);
   const meetingTodos = todos.filter((t) => String(t.meeting_id) === String(meeting.id));
+  const isFailed = ['transcription_failed', 'summary_failed', 'processing'].includes(meeting.status);
 
   return (
     <article className="max-w-[760px] mx-auto pb-12 animate-fade-up">
@@ -251,7 +311,9 @@ function Note({ data, todos, guildId, meetings, refetchTodos }) {
         )}
       </header>
 
-      {!notes && <p className="text-sm text-muted mt-8">No summary available — status: {meeting.status}.</p>}
+      {isFailed && <RetryBanner meeting={meeting} retry={retry} onDone={onReload} />}
+
+      {!notes && !isFailed && <p className="text-sm text-muted mt-8">No summary available — status: {meeting.status}.</p>}
 
       {notes && (
         <>
@@ -378,7 +440,7 @@ export default function Reading() {
     if (!guildId) return;
     let stale = false;
     api.meetings(guildId)
-      .then((rows) => { if (!stale) setMeetings((Array.isArray(rows) ? rows : []).filter((m) => (m.utterance_count ?? 1) > 0)); })
+      .then((rows) => { if (!stale) setMeetings((Array.isArray(rows) ? rows : []).filter((m) => (m.utterance_count ?? 1) > 0 || m.failed)); })
       .catch(() => { if (!stale) setMeetings([]); });
     return () => { stale = true; };
   }, [guildId]);
@@ -386,6 +448,14 @@ export default function Reading() {
   function loadTodos() {
     if (!guildId) return;
     api.todos(guildId).then((t) => setTodos(Array.isArray(t) ? t : [])).catch(() => {});
+  }
+
+  function reloadMeeting() {
+    if (!id || !guildId) return;
+    Promise.all([api.meeting(id), api.todos(guildId)])
+      .then(([m, t]) => { setData(m); setTodos(Array.isArray(t) ? t : []); })
+      .catch(() => {});
+    api.meetings(guildId).then((rows) => setMeetings((Array.isArray(rows) ? rows : []).filter((m) => (m.utterance_count ?? 1) > 0 || m.failed))).catch(() => {});
   }
 
   useEffect(() => {
@@ -404,7 +474,7 @@ export default function Reading() {
 
   return (
     <div className="px-6 md:px-8 py-7">
-      <Note key={data.meeting.id} data={data} todos={todos} guildId={guildId} meetings={meetings} refetchTodos={loadTodos} />
+      <Note key={data.meeting.id} data={data} todos={todos} guildId={guildId} meetings={meetings} refetchTodos={loadTodos} onReload={reloadMeeting} />
     </div>
   );
 }

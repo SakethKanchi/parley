@@ -9,6 +9,7 @@ import Reading from './pages/Reading.jsx';
 import ActionItems from './pages/ActionItems.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Search from './pages/Search.jsx';
+import Commands from './pages/Commands.jsx';
 import Setup from './pages/Setup.jsx';
 
 function Gate() {
@@ -36,6 +37,7 @@ function Gate() {
             <Route path="/action-items" element={<ActionItems />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/search" element={<Search />} />
+            <Route path="/commands" element={<Commands />} />
             <Route path="/setup" element={<Setup />} />
           </Route>
         </Routes>

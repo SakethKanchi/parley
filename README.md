@@ -18,6 +18,7 @@
 <p align="center">
   <a href="https://sakethkanchi.github.io/parley-landing/"><b>🌐 Website</b></a> ·
   <a href="#-demo"><b>🎬 Demo</b></a> ·
+  <a href="#-the-web-dashboard"><b>🖥️ Dashboard</b></a> ·
   <a href="#-quick-start-docker"><b>🐳 Quick start</b></a> ·
   <a href="#-installation"><b>🚀 Install</b></a> ·
   <a href="#-commands"><b>💬 Commands</b></a> ·
@@ -44,11 +45,51 @@
 
 ---
 
+## 🖥️ The web dashboard
+
+Notes land in Discord, but the **self-hosted web admin** is where you live with them: browse every meeting, read full notes, work the action-item list, watch talk-time analytics, search transcripts, and configure the bot from the browser. Dark by default, light when you want it.
+
+<p align="center">
+  <img src="./assets/screenshots/dashboard-dark.webp" width="820" alt="Parley dashboard — meeting counts, activity chart, top speakers, recent meetings" />
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="./assets/screenshots/meetings-dark.webp" alt="Meetings browser — a card per meeting with a TL;DR and talk-time split" /></td>
+    <td width="50%"><img src="./assets/screenshots/reading-dark.webp" alt="A single meeting — TL;DR, topics, decisions, open questions, action items" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Meetings</b> — every recording, with a TL;DR and talk-time split per card</td>
+    <td align="center"><b>Notes</b> — topics, decisions, open questions, and action items per meeting</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./assets/screenshots/analytics-dark.webp" alt="Analytics — meetings per day, talk-time and words-spoken leaderboards" /></td>
+    <td width="50%"><img src="./assets/screenshots/search-dark.webp" alt="Full-text search — matched phrase highlighted, linking to each meeting" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Analytics</b> — meetings per day, talk-time and word leaderboards</td>
+    <td align="center"><b>Search</b> — full-text across every transcript, jump to the moment</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./assets/screenshots/actions-dark.webp" alt="Action items — open tasks across meetings, filterable by person" /></td>
+    <td width="50%"><img src="./assets/screenshots/dashboard-light.webp" alt="The dashboard in light mode" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Action items</b> — a live to-do list from every meeting, filterable by person</td>
+    <td align="center"><b>Light mode</b> — an equally polished alternative</td>
+  </tr>
+</table>
+
+> Screenshots use a demo server with fictional data. The dashboard ships with the bot — `npm run web:build` once, then `npm start` (see [Running](#-running)). With Docker it's already running.
+
+---
+
 A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Audio is transcribed locally — only the final transcript text ever leaves your machine (to the summarizer you choose, or nowhere at all if you run a local model). No SaaS account, no per-seat pricing, no cloud recording.
 
 ## Table of contents
 
 - [Demo](#-demo)
+- [The web dashboard](#-the-web-dashboard)
 - [Features](#-features)
 - [How it works](#-how-it-works)
 - [Quick start (Docker)](#-quick-start-docker)
@@ -216,7 +257,13 @@ In the Developer Portal → **OAuth2 → URL Generator**, select scopes `bot` an
 
 ## ▶️ Running
 
-The bot needs **two processes** running together.
+The bot needs **two processes** running together, plus a one-time build of the dashboard UI.
+
+**Build the dashboard once** (the bot serves the built UI from `web/dist`):
+
+```bash
+npm run web:build
+```
 
 **Terminal 1 — STT sidecar** (first transcription downloads the whisper model, one-time):
 
@@ -226,7 +273,7 @@ npm run sidecar
 
 > The sidecar runs inside its own Python virtualenv at `stt_sidecar/.venv`. The `npm run sidecar` script uses that interpreter automatically.
 
-**Terminal 2 — Discord bot:**
+**Terminal 2 — Discord bot + dashboard:**
 
 ```bash
 npm start
@@ -234,7 +281,9 @@ npm start
 
 > `npm start` loads `.env` automatically via Node's `--env-file` flag (Node 20+). If your shell already has empty `DISCORD_TOKEN=` etc., the `.env` values win.
 
-For production, keep both alive with a process manager:
+The bot connects to Discord **and** the web dashboard comes up at **<http://127.0.0.1:3000>** (first login `admin` / `admin`, change it on sign-in). Haven't set a Discord token yet? Open the dashboard and paste it into the first-run wizard — Parley connects and registers its slash commands live, no restart. Run headless (no dashboard) with `WEB_UI=0 npm start`.
+
+For production, keep both processes alive with a process manager:
 
 ```bash
 pm2 start "npm run sidecar" --name meeting-sidecar
@@ -242,7 +291,7 @@ pm2 start "npm start"       --name meeting-bot
 pm2 save
 ```
 
-> For most self-hosters, the [Docker quick start](#-quick-start-docker) is simpler and more robust than pm2 — it supervises both processes and restarts them with the host.
+> For most self-hosters, the [Docker quick start](#-quick-start-docker) is simpler and more robust than pm2 — it builds the UI, supervises both processes, and restarts them with the host.
 
 ## 💬 Commands
 
@@ -373,7 +422,10 @@ npm test                                                        # all Node unit 
 node --test test/<name>.test.js                                 # a single test file
 cd stt_sidecar && .venv/bin/python -m pytest test_server.py -q  # sidecar tests
 npm run make:art                                                # regenerate the README brand art (assets/)
+node scripts/seed-demo-db.mjs                                   # build a demo DB (fictional data) for screenshots
 ```
+
+> **README screenshots** live in `assets/screenshots/` and are captured against the demo DB, not real meetings: `node scripts/seed-demo-db.mjs` seeds `demo/meetings.db`, then `node scripts/web-demo.mjs` serves it (with `web/vite.demo.config.js` for the UI) so you can screenshot the dashboard with clean data.
 
 **Project layout:**
 

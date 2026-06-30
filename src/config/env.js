@@ -1,11 +1,27 @@
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import dotenv from 'dotenv';
-dotenv.config({ override: true });
 const REQUIRED = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID'];
 export function resolveDataDir(env = process.env, exists = existsSync, cwd = process.cwd()) {
   if (env.DATA_DIR) return env.DATA_DIR;
   if (exists('/data')) return '/data';
   return cwd;
+}
+// The single .env the app reads at boot AND writes to from the web UI. Lives in
+// DATA_DIR so edits persist across restarts (critical when DATA_DIR is a Docker
+// volume; in local dev DATA_DIR is the cwd, so this is just ./.env as before).
+export function resolveEnvFile(env = process.env) {
+  return env.PARLEY_ENV_FILE || join(resolveDataDir(env), '.env');
+}
+// Load the cwd .env first (back-compat / `node --env-file`), then overlay the
+// persistent DATA_DIR/.env so values saved from the web UI win.
+dotenv.config({ override: true });
+{
+  const dataEnv = resolveEnvFile();
+  if (existsSync(dataEnv)) dotenv.config({ path: dataEnv, override: true });
+}
+export function hasDiscordCreds(env = config) {
+  return !!(env.discordToken && env.discordClientId);
 }
 export function validateEnv(env = process.env) {
   const empty = REQUIRED.filter((k) => !env[k] || env[k].trim() === '');

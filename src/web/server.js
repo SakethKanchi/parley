@@ -7,10 +7,10 @@ import { apiRouter } from './api.js';
 
 const DIST = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
 
-export function createWebServer({ db, client }) {
+export function createWebServer({ db, bot = null, client = null }) {
   const app = express();
   app.use(express.json());
-  app.use('/api', apiRouter({ db, client }));
+  app.use('/api', apiRouter({ db, bot, client }));
 
   if (existsSync(DIST)) {
     app.use(express.static(DIST));
@@ -20,8 +20,8 @@ export function createWebServer({ db, client }) {
   return app;
 }
 
-export function startWebServer({ db, client, port = 3000 }) {
+export function startWebServer({ db, bot = null, client = null, port = 3000, host = process.env.WEB_UI_HOST || '127.0.0.1' }) {
   db.backfillTodos();
-  const app = createWebServer({ db, client });
-  return app.listen(port, '127.0.0.1');
+  const app = createWebServer({ db, bot, client });
+  return app.listen(port, host);
 }

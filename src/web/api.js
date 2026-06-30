@@ -11,7 +11,7 @@ import { getSummarizer } from '../adapters/summarizer/index.js';
 import { buildTranscript, computeTalkTime } from '../pipeline/summarize.js';
 import { resolveSummaryLanguage } from '../adapters/summarizer/languages.js';
 import { MODEL_SUGGESTIONS, fetchOllamaModels } from '../adapters/summarizer/models.js';
-import { secretStatus, setProviderKey, isSecretProvider } from '../store/secrets.js';
+import { secretStatus, setProviderKey, isSecretProvider, connectionStatus, setConnection } from '../store/secrets.js';
 
 function audioDir(id) {
   return join(env.dataDir, 'audio', String(id));
@@ -21,15 +21,21 @@ function guildName(client, id, dbNames = {}) {
   return client?.guilds?.cache?.get(id)?.name || dbNames[id] || id;
 }
 
-export function apiRouter({ db, client }) {
+export function apiRouter({ db, bot = null, client = null }) {
   const r = Router();
+  // The live Discord client may not exist yet (bot starts lazily once creds are
+  // set). Always resolve it fresh from the controller so routes pick it up the
+  // moment the bot connects, without rebuilding the router. `client` is still
+  // accepted directly for tests and the standalone server.
+  const liveClient = () => bot?.client || client;
 
   r.get('/guilds', (_req, res) => {
+    const c = liveClient();
     const fromDb = db.listGuilds().map(({ guild_id }) => guild_id);
-    const fromCache = client ? [...client.guilds.cache.values()].map((g) => g.id) : [];
+    const fromCache = c ? [...c.guilds.cache.values()].map((g) => g.id) : [];
     const allIds = [...new Set([...fromDb, ...fromCache])];
     const dbNames = db.getGuildNames();
-    res.json(allIds.map((id) => ({ id, name: guildName(client, id, dbNames) })));
+    res.json(allIds.map((id) => ({ id, name: guildName(c, id, dbNames) })));
   });
 
   r.get('/guilds/:g/meetings', (req, res) => {
@@ -131,7 +137,7 @@ export function apiRouter({ db, client }) {
   });
 
   r.get('/guilds/:g/config', (req, res) => {
-    const guild = client?.guilds?.cache?.get(req.params.g);
+    const guild = liveClient()?.guilds?.cache?.get(req.params.g);
     const channels = guild
       ? [...guild.channels.cache.filter((c) => c.type === ChannelType.GuildText).values()]
           .map((c) => ({ id: c.id, name: c.name }))
@@ -176,6 +182,60 @@ export function apiRouter({ db, client }) {
     try {
       const secrets = await setProviderKey(provider, value, { env });
       res.json({ ok: true, secrets, providers: availableProviders(env) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── System / connection ─────────────────────────────────────────────────
+  // Overall onboarding + bot connection state for the UI. Never leaks secrets.
+  r.get('/system/status', (_req, res) => {
+    const c = liveClient();
+    res.json({
+      connection: connectionStatus(env),
+      providers: availableProviders(env),
+      secrets: secretStatus(env),
+      bot: bot
+        ? bot.status()
+        // No controller (standalone server): report live client if present.
+        : { state: c ? 'ready' : 'stopped', connected: !!c, hasCreds: !!env.discordToken,
+            user: c?.user ? { tag: c.user.tag, id: c.user.id } : null, guildCount: c?.guilds?.cache?.size ?? 0 },
+      managed: !!bot,
+      sttUrl: env.sttUrl,
+    });
+  });
+
+  // Save Discord token / client id / STT url (any subset), persist to .env,
+  // apply live, and (re)start the bot if it's managed and creds are present.
+  r.put('/system/connection', async (req, res) => {
+    const patch = {};
+    for (const k of ['discordToken', 'discordClientId', 'sttUrl']) {
+      if (typeof req.body?.[k] === 'string') patch[k] = req.body[k];
+    }
+    if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'No recognized settings to update.' });
+    try {
+      const connection = await setConnection(patch, { env });
+      let botResult = null;
+      // Restart the bot when Discord creds changed and we manage it.
+      if (bot && (patch.discordToken !== undefined || patch.discordClientId !== undefined)) {
+        botResult = await bot.restart();
+      }
+      res.json({ ok: true, connection, bot: bot ? bot.status() : null, botResult });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Manually (re)start or stop the bot.
+  r.post('/system/bot/:action', async (req, res) => {
+    if (!bot) return res.status(400).json({ error: 'Bot is not managed by this server.' });
+    const { action } = req.params;
+    try {
+      if (action === 'start') await bot.start();
+      else if (action === 'restart') await bot.restart();
+      else if (action === 'stop') await bot.stop();
+      else return res.status(400).json({ error: `Unknown action "${action}".` });
+      res.json({ ok: true, bot: bot.status() });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

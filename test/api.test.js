@@ -143,3 +143,49 @@ test('POST ask returns an answer using the guild provider', async () => {
     assert.equal(bad.status, 400);
   } finally { close(); }
 });
+
+test('GET /api/system/status reports bot + connection (managed)', async () => {
+  const db = openDb(':memory:');
+  // Fake controller standing in for BotController.
+  const fakeBot = {
+    client: { user: { tag: 'Parley#1', id: 'b1' }, guilds: { cache: new Map([['g', {}]]) } },
+    status() {
+      return { state: 'ready', connected: true, hasCreds: true,
+        user: { tag: 'Parley#1', id: 'b1' }, guildCount: 1, error: null };
+    },
+  };
+  const app = express();
+  app.use(express.json());
+  app.use('/api', apiRouter({ db, bot: fakeBot }));
+  const { base, close } = await listen(app);
+  try {
+    const s = await (await fetch(`${base}/api/system/status`)).json();
+    assert.equal(s.managed, true);
+    assert.equal(s.bot.connected, true);
+    assert.equal(s.bot.user.tag, 'Parley#1');
+    // The token presence is reported, never the value.
+    assert.ok('connection' in s);
+    assert.equal('value' in (s.connection.discordToken || {}), false);
+  } finally { close(); }
+});
+
+test('PUT /api/system/connection requires a recognized field', async () => {
+  const db = openDb(':memory:');
+  const { base, close } = await listen(appWith(db));
+  try {
+    const bad = await fetch(`${base}/api/system/connection`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nope: 'x' }),
+    });
+    assert.equal(bad.status, 400);
+  } finally { close(); }
+});
+
+test('POST /api/system/bot/:action is rejected when unmanaged', async () => {
+  const db = openDb(':memory:');
+  const { base, close } = await listen(appWith(db));
+  try {
+    const r = await fetch(`${base}/api/system/bot/start`, { method: 'POST' });
+    assert.equal(r.status, 400);
+  } finally { close(); }
+});

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useGuild } from '../GuildContext.jsx';
 import { useTheme } from '../ThemeContext.jsx';
-import { Icon } from './ui.jsx';
+import { Icon, Logo } from './ui.jsx';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: Icon.Home, end: true },
@@ -53,10 +53,7 @@ export default function Layout() {
         style={{ width: 'var(--sidebar-w)' }}
       >
         <Link to="/" className="flex items-center gap-2.5 px-5 h-[60px] shrink-0 no-underline">
-          <span className="grid place-items-center h-8 w-8 rounded-[10px] text-primary-ink shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 60%, var(--accent)))' }}>
-            <Icon.Mic width={17} height={17} />
-          </span>
+          <Logo size={30} className="shrink-0" />
           <span className="font-display text-[19px] font-extrabold text-ink tracking-tight">Parley</span>
         </Link>
 

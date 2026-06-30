@@ -30,6 +30,25 @@ export const Icon = {
   Calendar: (p) => <I {...p}><rect x="3.5" y="4.5" width="17" height="16" rx="2.5" /><path d="M3.5 9h17M8 2.5v4M16 2.5v4" /></I>,
 };
 
+/* ── Brand mark (the real Parley waveform → note logo) ──────────────────── */
+export function Logo({ size = 32, rounded = true, className = '' }) {
+  // Waveform bars (brand blue) condensing into a single note dash (brand green),
+  // matching assets/logo.svg. viewBox is the 512 brand canvas.
+  return (
+    <svg width={size} height={size} viewBox="0 0 512 512" className={className} role="img" aria-label="Parley">
+      {rounded && <rect x="6" y="6" width="500" height="500" rx="110" fill="#0A0B0F" />}
+      <g stroke="#5865F2" strokeWidth="14" strokeLinecap="round">
+        <line x1="140" y1="216" x2="140" y2="296" />
+        <line x1="174" y1="190" x2="174" y2="322" />
+        <line x1="208" y1="160" x2="208" y2="352" />
+        <line x1="242" y1="186" x2="242" y2="326" />
+        <line x1="276" y1="208" x2="276" y2="304" />
+      </g>
+      <line x1="302" y1="256" x2="372" y2="256" stroke="#23A559" strokeWidth="14" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /* ── Avatar ─────────────────────────────────────────────────────────────── */
 export function Avatar({ name, size = 28, ring = false }) {
   const c = colorOf(name);

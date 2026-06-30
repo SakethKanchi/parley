@@ -1,316 +1,125 @@
-import { useEffect, useState } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useGuild } from '../GuildContext.jsx';
+import { Avatar, AvatarStack, Icon, Empty, TalkBar } from '../components/ui.jsx';
+import { fmtDateLong, fmtTime, fmtDuration, fmtClock, fmtMs, colorOf } from '../lib/format.js';
 
-/* ── helpers ──────────────────────────────────────────────────────────── */
-
-function toDate(raw) {
-  if (!raw) return null;
-  const d = new Date(typeof raw === 'string' ? raw.replace(' ', 'T') : raw);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-// Every meeting is the same Discord channel, so the date is what makes a note
-// distinct — use it as the title ("Sunday, June 29").
-function fmtTitle(raw) {
-  const d = toDate(raw);
-  if (!d) return String(raw ?? '');
-  const now = new Date();
-  return d.toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric',
-    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
-  });
-}
-
-function fmtTime(raw) {
-  const d = toDate(raw);
-  return d ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-}
-
-function fmtDuration(start, end) {
-  if (!start || !end) return null;
-  try {
-    const ms =
-      new Date((end + '').replace(' ', 'T')) -
-      new Date((start + '').replace(' ', 'T'));
-    if (ms <= 0) return null;
-    const mins = Math.round(ms / 60_000);
-    if (mins < 60) return `${mins} min`;
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return m ? `${h}h ${m}m` : `${h}h`;
-  } catch { return null; }
-}
-
-/* ── loading skeleton ─────────────────────────────────────────────────── */
-
-function DocSkeleton() {
-  return (
-    <div
-      className="max-w-[72ch] mx-auto animate-pulse space-y-8 pt-2 pb-16"
-      role="status"
-      aria-label="Loading meeting"
-    >
-      <div className="space-y-2">
-        <div className="h-7 bg-panel rounded w-48" />
-        <div className="h-3 bg-panel rounded w-32 mt-2" />
-      </div>
-      <div className="space-y-2.5">
-        <div className="h-4 bg-panel rounded w-full" />
-        <div className="h-4 bg-panel rounded w-10/12" />
-        <div className="h-4 bg-panel rounded w-8/12" />
-      </div>
-      <div className="space-y-3">
-        <div className="h-2.5 bg-panel rounded w-16" />
-        {[100, 80, 90, 70].map((w, i) => (
-          <div key={i} className="h-4 bg-panel rounded" style={{ width: `${w}%` }} />
-        ))}
-      </div>
-      <div className="space-y-2.5">
-        <div className="h-2.5 bg-panel rounded w-20" />
-        {[85, 60, 72].map((w, i) => (
-          <div key={i} className="space-y-1">
-            <div className="h-3 bg-panel rounded" style={{ width: `${w * 0.6}%` }} />
-            <div className="h-1.5 bg-panel rounded" style={{ width: `${w}%` }} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── empty state ──────────────────────────────────────────────────────── */
-
-function EmptyState({ title, body }) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-64 text-center gap-2 py-20">
-      <p className="text-sm font-medium text-ink">{title}</p>
-      {body && (
-        <p className="text-sm text-muted max-w-[38ch] leading-relaxed mt-1">{body}</p>
-      )}
-    </div>
-  );
-}
-
-/* ── section wrapper ──────────────────────────────────────────────────── */
-
-function Section({ label, children }) {
-  return (
-    <section className="mt-8">
-      {label && (
-        <h2 className="text-xs font-semibold text-muted mb-3">
-          {label}
-        </h2>
-      )}
-      {children}
-    </section>
-  );
-}
-
-/* ── action items ─────────────────────────────────────────────────────── */
-
-function ActionItem({ item, todo }) {
+/* ── action item (in-note, checkable) ─────────────────────────────────── */
+function ActionItem({ item, todo, onToggle }) {
   const [done, setDone] = useState(Boolean(todo?.done));
   const [busy, setBusy] = useState(false);
+  useEffect(() => { if (todo) setDone(Boolean(todo.done)); }, [todo]);
 
-  // Sync if the todo prop itself changes (e.g. todos refetch)
-  useEffect(() => {
-    if (todo) setDone(Boolean(todo.done));
-  }, [todo]);
-
-  async function handleChange() {
+  async function change() {
     if (!todo || busy) return;
     const next = !done;
-    setDone(next); // optimistic
-    setBusy(true);
-    try {
-      const updated = await api.setTodoDone(todo.id, next);
-      setDone(Boolean(updated.done));
-    } catch {
-      setDone(!next); // revert on error
-    } finally {
-      setBusy(false);
-    }
+    setDone(next); setBusy(true);
+    try { await api.setTodoDone(todo.id, next); onToggle?.(); }
+    catch { setDone(!next); }
+    finally { setBusy(false); }
   }
 
   return (
-    <li className="flex items-start gap-2.5">
-      <input
-        type="checkbox"
-        checked={done}
-        onChange={handleChange}
-        disabled={!todo || busy}
-        className="pcheck mt-0.5"
-        aria-label={item.task}
-      />
-      <span
-        className={[
-          'text-sm leading-relaxed',
-          done ? 'line-through text-muted' : 'text-ink',
-        ].join(' ')}
-      >
+    <li className="flex items-start gap-3 group">
+      <input type="checkbox" checked={done} onChange={change} disabled={!todo || busy} className="pcheck mt-0.5" aria-label={item.task} />
+      <div className="min-w-0">
+        <span className={`text-[14.5px] leading-relaxed ${done ? 'line-through text-muted' : 'text-ink'}`}>{item.task}</span>
         {item.assignee && (
-          <span className="font-semibold">{item.assignee}:&nbsp;</span>
+          <span className="ml-2 inline-flex items-center gap-1.5 align-middle chip">
+            <Avatar name={item.assignee} size={16} />{item.assignee}
+          </span>
         )}
-        {item.task}
-      </span>
+      </div>
     </li>
   );
 }
 
-function ActionItems({ items, todos, meetingId }) {
-  const meetingTodos = todos.filter(
-    (t) => String(t.meeting_id) === String(meetingId),
-  );
-  return (
-    <ul className="space-y-2.5">
-      {items.map((item, i) => {
-        const todo = meetingTodos.find((t) => t.task === item.task) ?? null;
-        return <ActionItem key={item.task} item={item} todo={todo} />;
-      })}
-    </ul>
-  );
-}
-
-/* ── talk time ────────────────────────────────────────────────────────── */
-
-function TalkTime({ talktime }) {
-  return (
-    <div className="space-y-3">
-      {talktime.map((t, i) => (
-        <div key={i}>
-          <div className="flex justify-between text-xs mb-1.5">
-            <span className="text-ink">{t.displayName}</span>
-            <span className="text-muted tabular-nums">{t.pct}%</span>
-          </div>
-          <div className="h-1.5 bg-panel-2 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary rounded-full transition-[width] duration-500"
-              style={{ width: `${t.pct}%` }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ── transcript ───────────────────────────────────────────────────────── */
-
 function Transcript({ utterances }) {
   const [open, setOpen] = useState(false);
-
+  const [q, setQ] = useState('');
   if (!utterances.length) return null;
 
-  return (
-    <div className="mt-8">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex items-center gap-1.5 text-xs text-muted hover:text-ink transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
-      >
-        <span
-          className="inline-block transition-transform duration-200 select-none"
-          style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}
-          aria-hidden="true"
-        >
-          ▸
-        </span>
-        <span className="font-medium">
-          {open ? 'Hide transcript' : 'Transcript'}
-        </span>
-        <span className="opacity-60">({utterances.length} lines)</span>
-      </button>
+  const filtered = q.trim()
+    ? utterances.filter((u) => u.text.toLowerCase().includes(q.toLowerCase()))
+    : utterances;
 
+  return (
+    <section className="mt-10 pt-8 border-t border-border">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-2 text-sm font-bold text-ink">
+          <Icon.Chevron width={16} height={16} className={`transition-transform ${open ? 'rotate-90' : ''}`} />
+          Transcript
+          <span className="chip">{utterances.length} lines</span>
+        </button>
+        {open && (
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find in transcript…"
+            className="input !w-52 !py-1.5 text-[13px]" />
+        )}
+      </div>
       {open && (
-        <div className="mt-4 space-y-1.5 font-mono text-sm pl-4 border-l border-edge">
-          {utterances.map((u, i) => (
-            <p key={i} className="leading-relaxed">
-              <span className="text-accent">{u.display_name}</span>
-              <span className="text-edge">: </span>
-              <span className="text-muted">{u.text}</span>
-            </p>
+        <div className="space-y-4">
+          {filtered.length === 0 && <p className="text-sm text-muted">No lines match "{q}".</p>}
+          {filtered.map((u, i) => (
+            <div key={i} className="flex items-start gap-3">
+              <Avatar name={u.display_name} size={28} />
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[13px] font-semibold" style={{ color: colorOf(u.display_name) }}>{u.display_name}</span>
+                  <span className="text-[11px] text-faint tabular-nums">{fmtClock(u.start_ms)}</span>
+                </div>
+                <p className="text-[14px] text-ink-2 leading-relaxed mt-0.5">{u.text}</p>
+              </div>
+            </div>
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
 /* ── ask box ──────────────────────────────────────────────────────────── */
-
 function AskBox({ guildId, meetingId }) {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [error, setError] = useState(null);
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const q = question.trim();
+  const SUGGESTIONS = ['What was decided?', 'Who owns what?', 'Summarize in 3 bullets'];
+
+  async function ask(qStr) {
+    const q = (qStr ?? question).trim();
     if (!q || loading) return;
-    setLoading(true);
-    setAnswer(null);
-    setError(null);
-    try {
-      const res = await api.ask(guildId, meetingId, q);
-      setAnswer(res.answer);
-    } catch (err) {
-      setError(err?.message || 'Request failed');
-    } finally {
-      setLoading(false);
-    }
+    setQuestion(q); setLoading(true); setAnswer(null); setError(null);
+    try { const res = await api.ask(guildId, meetingId, q); setAnswer(res.answer); }
+    catch (err) { setError(err?.message || 'Request failed'); }
+    finally { setLoading(false); }
   }
 
   return (
-    <section className="mt-12 pt-8 border-t border-edge">
-      <h2 className="text-sm font-semibold text-ink mb-4">Ask about this meeting</h2>
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="What was decided? Who owns what?"
-          disabled={loading}
-          className={[
-            'flex-1 min-w-0 bg-panel text-ink text-sm px-3 py-2 rounded',
-            'border border-edge',
-            'placeholder:text-muted',
-            'focus:outline-none focus:border-primary',
-            'disabled:opacity-50',
-            'transition-colors duration-150',
-          ].join(' ')}
-        />
-        <button
-          type="submit"
-          disabled={!question.trim() || loading}
-          className={[
-            'px-4 py-2 text-sm font-medium rounded shrink-0',
-            'bg-primary text-white',
-            'hover:opacity-90',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
-            'transition-opacity duration-150',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1',
-          ].join(' ')}
-        >
+    <section className="mt-10 card p-5"
+      style={{ background: 'linear-gradient(180deg, var(--primary-soft), transparent)' }}>
+      <h2 className="flex items-center gap-2 text-sm font-bold text-ink mb-3">
+        <Icon.Sparkle width={16} height={16} className="text-primary" /> Ask this meeting
+      </h2>
+      <form onSubmit={(e) => { e.preventDefault(); ask(); }} className="flex gap-2">
+        <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask anything about this meeting…"
+          disabled={loading} className="input flex-1" />
+        <button type="submit" disabled={!question.trim() || loading} className="btn btn-primary">
           {loading ? 'Asking…' : 'Ask'}
         </button>
       </form>
-
-      {error && (
-        <p className="mt-3 text-sm text-error leading-relaxed" role="alert">
-          {error}
-        </p>
+      {!answer && !loading && (
+        <div className="flex flex-wrap gap-2 mt-3">
+          {SUGGESTIONS.map((s) => (
+            <button key={s} onClick={() => ask(s)} className="chip hover:!bg-surface-2 transition-colors">{s}</button>
+          ))}
+        </div>
       )}
-
+      {error && <p className="mt-3 text-sm text-error" role="alert">{error}</p>}
       {answer && (
-        <div
-          className="mt-5 text-sm text-ink leading-relaxed bg-panel rounded p-4 border border-edge"
-          role="region"
-          aria-label="Answer"
-        >
+        <div className="mt-4 text-[14.5px] text-ink leading-relaxed bg-surface-2 rounded-sm p-4 border border-border whitespace-pre-wrap animate-fade-in">
           {answer}
         </div>
       )}
@@ -319,305 +128,283 @@ function AskBox({ guildId, meetingId }) {
 }
 
 /* ── meeting actions (delete / merge) ─────────────────────────────────── */
-
 function MeetingActions({ meeting, meetings }) {
   const [open, setOpen] = useState(false);
-  const [merging, setMerging] = useState(false); // false | 'pick' | 'busy'
+  const [mode, setMode] = useState(false); // false | 'pick' | 'busy'
   const [sources, setSources] = useState(() => new Set());
   const [err, setErr] = useState(null);
-
   const others = (meetings || []).filter((m) => m.id !== meeting.id);
 
-  async function handleDelete() {
+  async function del() {
     setOpen(false);
     if (!window.confirm('Delete this meeting, its transcript, summary and action items? This cannot be undone.')) return;
-    try {
-      await api.deleteMeeting(meeting.id);
-      window.location.assign('/'); // full reload so the rail drops it too
-    } catch (e) { setErr(e?.message || 'Delete failed'); }
+    try { await api.deleteMeeting(meeting.id); window.location.assign('/meetings'); }
+    catch (e) { setErr(e?.message || 'Delete failed'); }
   }
-
-  function toggleSource(id) {
-    setSources((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
-  async function handleMerge() {
+  function toggle(id) { setSources((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
+  async function merge() {
     if (sources.size === 0) return;
-    setMerging('busy');
-    setErr(null);
-    try {
-      await api.mergeMeetings(meeting.id, [...sources]);
-      window.location.assign(`/meetings/${meeting.id}`); // reload re-summarized note
-    } catch (e) {
-      setErr(e?.message || 'Merge failed');
-      setMerging('pick');
-    }
+    setMode('busy'); setErr(null);
+    try { await api.mergeMeetings(meeting.id, [...sources]); window.location.assign(`/meetings/${meeting.id}`); }
+    catch (e) { setErr(e?.message || 'Merge failed'); setMode('pick'); }
   }
 
   return (
     <div className="relative shrink-0">
-      <button
-        onClick={() => { setOpen((v) => !v); setMerging(false); }}
-        aria-label="Meeting actions"
-        className="h-8 w-8 flex items-center justify-center rounded-md border border-edge text-muted hover:text-ink hover:border-muted transition-colors duration-150 bg-transparent cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
-        </svg>
+      <button onClick={() => { setOpen((v) => !v); setMode(false); }} aria-label="Meeting actions"
+        className="h-9 w-9 grid place-items-center rounded-sm border border-border text-muted hover:text-ink hover:bg-surface-2 transition-colors">
+        <Icon.Dots width={18} height={18} />
       </button>
-
-      {open && merging === false && (
-        <div className="absolute right-0 mt-1 w-44 bg-bg-elevated border border-edge rounded-md shadow-lg py-1 z-10" role="menu">
-          <button
-            onClick={() => { setMerging('pick'); setOpen(false); }}
-            disabled={others.length === 0}
-            className="w-full text-left px-3 py-1.5 text-sm text-ink hover:bg-panel disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
-            role="menuitem"
-          >
-            Merge another meeting…
+      {open && !mode && (
+        <div className="absolute right-0 mt-1.5 w-52 card shadow-lg py-1 z-20">
+          <button onClick={() => { setMode('pick'); setOpen(false); }} disabled={others.length === 0}
+            className="w-full flex items-center gap-2.5 text-left px-3 py-2 text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+            <Icon.Merge width={15} height={15} /> Merge another meeting
           </button>
-          <button
-            onClick={handleDelete}
-            className="w-full text-left px-3 py-1.5 text-sm text-error hover:bg-panel cursor-pointer"
-            role="menuitem"
-          >
-            Delete meeting
+          <button onClick={del} className="w-full flex items-center gap-2.5 text-left px-3 py-2 text-sm text-error hover:bg-error-soft">
+            <Icon.Trash width={15} height={15} /> Delete meeting
           </button>
         </div>
       )}
-
-      {merging !== false && (
-        <div className="absolute right-0 mt-1 w-80 bg-bg-elevated border border-edge rounded-md shadow-lg p-3 z-10">
-          <p className="text-sm font-medium text-ink mb-2">Merge into this note</p>
+      {mode && (
+        <div className="absolute right-0 mt-1.5 w-80 card shadow-lg p-3 z-20">
+          <p className="text-sm font-semibold text-ink mb-2">Merge into this note</p>
           <div className="max-h-64 overflow-y-auto -mx-1 px-1 space-y-0.5">
             {others.map((m) => (
-              <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-panel cursor-pointer text-sm">
-                <input type="checkbox" className="pcheck h-4 w-4" checked={sources.has(m.id)} onChange={() => toggleSource(m.id)} disabled={merging === 'busy'} />
-                <span className="text-ink">{fmtTitle(m.started_at)}</span>
-                <span className="text-muted text-xs ml-auto">{fmtTime(m.started_at)} · {m.utterance_count ?? 0}u</span>
+              <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-surface-2 cursor-pointer text-sm">
+                <input type="checkbox" className="pcheck h-4 w-4" checked={sources.has(m.id)} onChange={() => toggle(m.id)} disabled={mode === 'busy'} />
+                <span className="text-ink truncate">{fmtDateLong(m.started_at)}</span>
+                <span className="text-muted text-xs ml-auto shrink-0">{fmtTime(m.started_at)}</span>
               </label>
             ))}
           </div>
-          {err && <p className="text-xs text-error mt-2" role="alert">{err}</p>}
+          {err && <p className="text-xs text-error mt-2">{err}</p>}
           <div className="flex items-center justify-end gap-2 mt-3">
-            <button onClick={() => { setMerging(false); setSources(new Set()); setErr(null); }} disabled={merging === 'busy'} className="text-sm text-muted hover:text-ink px-2 py-1 cursor-pointer disabled:opacity-40">Cancel</button>
-            <button onClick={handleMerge} disabled={sources.size === 0 || merging === 'busy'} className="text-sm bg-primary text-white rounded px-3 py-1 cursor-pointer disabled:opacity-40">
-              {merging === 'busy' ? 'Merging…' : `Merge ${sources.size || ''}`.trim()}
+            <button onClick={() => { setMode(false); setSources(new Set()); setErr(null); }} disabled={mode === 'busy'} className="btn btn-ghost !py-1.5">Cancel</button>
+            <button onClick={merge} disabled={sources.size === 0 || mode === 'busy'} className="btn btn-primary !py-1.5">
+              {mode === 'busy' ? 'Merging…' : `Merge ${sources.size || ''}`.trim()}
             </button>
           </div>
         </div>
       )}
-      {err && merging === false && <p className="text-xs text-error mt-1 absolute right-0 whitespace-nowrap">{err}</p>}
+      {err && !mode && <p className="text-xs text-error mt-1 absolute right-0 whitespace-nowrap">{err}</p>}
+    </div>
+  );
+}
+
+/* ── prev/next meeting nav ────────────────────────────────────────────── */
+function MeetingNav({ meetings, id }) {
+  const idx = meetings.findIndex((m) => String(m.id) === String(id));
+  if (idx === -1) return null;
+  const newer = meetings[idx - 1]; // list is newest-first
+  const older = meetings[idx + 1];
+  return (
+    <div className="flex items-center justify-between gap-3 mt-12 pt-6 border-t border-border">
+      {older ? (
+        <Link to={`/meetings/${older.id}`} className="group flex items-center gap-2 text-sm text-muted hover:text-ink no-underline">
+          <Icon.Arrow width={16} height={16} className="rotate-180" />
+          <span><span className="block text-[11px] text-faint">Older</span>{fmtDateLong(older.started_at)}</span>
+        </Link>
+      ) : <span />}
+      {newer ? (
+        <Link to={`/meetings/${newer.id}`} className="group flex items-center gap-2 text-sm text-muted hover:text-ink no-underline text-right">
+          <span><span className="block text-[11px] text-faint">Newer</span>{fmtDateLong(newer.started_at)}</span>
+          <Icon.Arrow width={16} height={16} />
+        </Link>
+      ) : <span />}
     </div>
   );
 }
 
 /* ── note document ────────────────────────────────────────────────────── */
-
-function NoteDocument({ data, todos, guildId, meetings }) {
+function Note({ data, todos, guildId, meetings, refetchTodos }) {
   const { meeting, summary, attendees, utterances } = data;
   const notes = summary?.notes;
   const duration = fmtDuration(meeting.started_at, meeting.ended_at);
+  const meetingTodos = todos.filter((t) => String(t.meeting_id) === String(meeting.id));
 
   return (
-    <article className="note-enter max-w-[72ch] mx-auto pb-16 pt-2">
+    <article className="max-w-[760px] mx-auto pb-12 animate-fade-up">
+      <Link to="/meetings" className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink mb-5 no-underline">
+        <Icon.Arrow width={14} height={14} className="rotate-180" /> All meetings
+      </Link>
 
-      {/* Meeting header */}
-      <header className="mb-8">
+      <header>
         <div className="flex items-start justify-between gap-3">
-          <h1 className="font-display text-2xl font-semibold text-ink leading-tight">
-            {fmtTitle(meeting.started_at)}
-          </h1>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="chip"><Icon.Hash width={12} height={12} />{meeting.channel_name}</span>
+            </div>
+            <h1 className="font-display text-[30px] font-extrabold text-ink leading-tight tracking-tight">{fmtDateLong(meeting.started_at)}</h1>
+            <p className="text-sm text-muted mt-1.5 flex items-center gap-3 flex-wrap">
+              <span className="inline-flex items-center gap-1.5"><Icon.Clock width={14} height={14} />{fmtTime(meeting.started_at)}{duration && ` · ${duration}`}</span>
+              {attendees?.length > 0 && <span className="inline-flex items-center gap-1.5"><Icon.Users width={14} height={14} />{attendees.length} attendees</span>}
+            </p>
+          </div>
           <MeetingActions meeting={meeting} meetings={meetings} />
         </div>
-        <p className="text-sm text-muted mt-1.5">
-          {fmtTime(meeting.started_at)}
-          {duration && <span> · {duration}</span>}
-          <span> · #{meeting.channel_name}</span>
-        </p>
+
         {attendees?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-3" aria-label="Attendees">
-            {attendees.map((a) => (
-              <span
-                key={a.user_id}
-                className="px-2 py-0.5 bg-panel text-xs text-muted rounded"
-              >
-                {a.display_name}
-              </span>
-            ))}
+          <div className="flex items-center gap-2 mt-4">
+            <AvatarStack names={attendees.map((a) => a.display_name)} size={28} max={8} />
           </div>
         )}
       </header>
 
-      {/* No summary yet */}
-      {!notes && (
-        <p className="text-sm text-muted">
-          No summary available — status: {meeting.status}.
-        </p>
-      )}
+      {!notes && <p className="text-sm text-muted mt-8">No summary available — status: {meeting.status}.</p>}
 
-      {/* Note body */}
       {notes && (
         <>
-          {/* TL;DR as opening paragraph — no label */}
-          {notes.tldr && (
-            <p className="text-[15px] text-ink leading-relaxed mb-8">
-              {notes.tldr}
-            </p>
-          )}
+          {notes.tldr && <p className="text-[16px] text-ink leading-relaxed mt-8 font-medium">{notes.tldr}</p>}
 
           {notes.topics?.length > 0 && (
-            <Section label="Topics">
-              <div className="space-y-4">
-                {notes.topics.map((topic, i) => (
-                  <div key={i}>
-                    <h3 className="text-sm font-semibold text-ink">{topic.title}</h3>
-                    {topic.points?.length > 0 && (
-                      <ul className="mt-1.5 space-y-1 pl-4 list-disc marker:text-edge">
-                        {topic.points.map((pt, j) => (
-                          <li key={j} className="text-sm text-muted">{pt}</li>
+            <section className="mt-9">
+              <h2 className="text-sm font-bold text-ink mb-4">Topics</h2>
+              <div className="space-y-5">
+                {notes.topics.map((t, i) => (
+                  <div key={i} className="relative pl-4 border-l-2" style={{ borderColor: 'var(--border-strong)' }}>
+                    <h3 className="text-[15px] font-semibold text-ink">{t.title}</h3>
+                    {t.points?.length > 0 && (
+                      <ul className="mt-2 space-y-1.5">
+                        {t.points.map((p, j) => (
+                          <li key={j} className="text-[14px] text-ink-2 leading-relaxed flex gap-2">
+                            <span className="text-faint mt-2 h-1 w-1 rounded-full bg-current shrink-0" />{p}
+                          </li>
                         ))}
                       </ul>
                     )}
                   </div>
                 ))}
               </div>
-            </Section>
+            </section>
           )}
 
           {notes.decisions?.length > 0 && (
-            <Section label="Decisions">
-              <ul className="space-y-1.5 pl-4 list-disc marker:text-edge">
+            <section className="mt-9">
+              <h2 className="text-sm font-bold text-ink mb-3">Decisions</h2>
+              <ul className="space-y-2">
                 {notes.decisions.map((d, i) => (
-                  <li key={i} className="text-sm text-ink">{d}</li>
+                  <li key={i} className="flex items-start gap-2.5 text-[14.5px] text-ink leading-relaxed">
+                    <Icon.Check width={16} height={16} className="text-accent mt-0.5 shrink-0" />{d}
+                  </li>
                 ))}
               </ul>
-            </Section>
+            </section>
           )}
 
           {notes.openQuestions?.length > 0 && (
-            <Section label="Open questions">
-              <ul className="space-y-1.5 pl-4 list-disc marker:text-edge">
+            <section className="mt-9">
+              <h2 className="text-sm font-bold text-ink mb-3">Open questions</h2>
+              <ul className="space-y-2">
                 {notes.openQuestions.map((q, i) => (
-                  <li key={i} className="text-sm text-ink">{q}</li>
+                  <li key={i} className="text-[14.5px] text-ink leading-relaxed flex gap-2.5">
+                    <span className="text-warn font-bold shrink-0">?</span>{q}
+                  </li>
                 ))}
               </ul>
-            </Section>
+            </section>
           )}
 
           {notes.actionItems?.length > 0 && (
-            <Section label="Action items">
-              <ActionItems
-                items={notes.actionItems}
-                todos={todos}
-                meetingId={meeting.id}
-              />
-            </Section>
+            <section className="mt-9 card p-5">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-ink mb-4">
+                <Icon.CheckSquare width={16} height={16} className="text-primary" /> Action items
+              </h2>
+              <ul className="space-y-3">
+                {notes.actionItems.map((item) => {
+                  const todo = meetingTodos.find((t) => t.task === item.task) ?? null;
+                  return <ActionItem key={item.task} item={item} todo={todo} onToggle={refetchTodos} />;
+                })}
+              </ul>
+            </section>
           )}
         </>
       )}
 
-      {/* Talk time */}
       {summary?.talktime?.length > 0 && (
-        <Section label="Talk time">
-          <TalkTime talktime={summary.talktime} />
-        </Section>
+        <section className="mt-9">
+          <h2 className="text-sm font-bold text-ink mb-4">Talk time</h2>
+          <div className="mb-3"><TalkBar talktime={summary.talktime} height={8} /></div>
+          <div className="space-y-2.5">
+            {summary.talktime.map((t, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Avatar name={t.displayName} size={24} />
+                <span className="text-[13.5px] text-ink flex-1">{t.displayName}</span>
+                <span className="text-xs text-muted tabular-nums">{fmtMs(t.ms)}</span>
+                <span className="text-xs font-semibold tabular-nums w-10 text-right" style={{ color: colorOf(t.displayName) }}>{t.pct}%</span>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
-      {/* Transcript — collapsed by default */}
       <Transcript utterances={utterances ?? []} />
-
-      {/* Ask box */}
       {guildId && <AskBox guildId={guildId} meetingId={meeting.id} />}
+      <MeetingNav meetings={meetings} id={meeting.id} />
     </article>
   );
 }
 
-/* ── page ─────────────────────────────────────────────────────────────── */
+function NoteSkeleton() {
+  return (
+    <div className="max-w-[760px] mx-auto pb-12 px-6 md:px-8 py-7">
+      <div className="h-3 w-24 skeleton mb-6" />
+      <div className="h-5 w-20 skeleton mb-3 rounded-full" />
+      <div className="h-9 w-72 skeleton mb-3" />
+      <div className="h-4 w-48 skeleton mb-8" />
+      <div className="space-y-2.5 mb-8">
+        <div className="h-4 w-full skeleton" /><div className="h-4 w-11/12 skeleton" /><div className="h-4 w-9/12 skeleton" />
+      </div>
+      {[0, 1].map((i) => (
+        <div key={i} className="mb-8">
+          <div className="h-4 w-28 skeleton mb-3" />
+          <div className="space-y-2"><div className="h-4 w-full skeleton" /><div className="h-4 w-10/12 skeleton" /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Reading() {
   const { id } = useParams();
   const { guildId } = useGuild();
-
-  // Meetings list — used for the index-route redirect to latest
-  const [meetings, setMeetings] = useState(null); // null = loading
-
-  // Meeting detail
+  const [meetings, setMeetings] = useState([]);
   const [data, setData] = useState(null);
   const [todos, setTodos] = useState([]);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Fetch meetings list whenever guild changes (needed for redirect)
   useEffect(() => {
-    if (!guildId) { setMeetings([]); return; }
+    if (!guildId) return;
     let stale = false;
-    setMeetings(null);
     api.meetings(guildId)
       .then((rows) => { if (!stale) setMeetings((Array.isArray(rows) ? rows : []).filter((m) => (m.utterance_count ?? 1) > 0)); })
       .catch(() => { if (!stale) setMeetings([]); });
     return () => { stale = true; };
   }, [guildId]);
 
-  // Fetch meeting detail + todos when id or guild changes
+  function loadTodos() {
+    if (!guildId) return;
+    api.todos(guildId).then((t) => setTodos(Array.isArray(t) ? t : [])).catch(() => {});
+  }
+
   useEffect(() => {
-    if (!id || !guildId) { setData(null); setTodos([]); return; }
+    if (!id || !guildId) return;
     let stale = false;
-    setDetailLoading(true);
-    setDetailError(null);
-    setData(null);
-    Promise.all([
-      api.meeting(id),
-      api.todos(guildId),
-    ])
-      .then(([meetingData, todosData]) => {
-        if (stale) return;
-        setData(meetingData);
-        setTodos(Array.isArray(todosData) ? todosData : []);
-      })
-      .catch((err) => {
-        if (stale) return;
-        setDetailError(err?.message || 'Failed to load meeting');
-      })
-      .finally(() => { if (!stale) setDetailLoading(false); });
+    setLoading(true); setError(null); setData(null);
+    Promise.all([api.meeting(id), api.todos(guildId)])
+      .then(([m, t]) => { if (stale) return; setData(m); setTodos(Array.isArray(t) ? t : []); })
+      .catch((e) => { if (!stale) setError(e?.message || 'Failed to load meeting'); })
+      .finally(() => { if (!stale) setLoading(false); });
     return () => { stale = true; };
   }, [id, guildId]);
 
-  /* ── index route: redirect to latest meeting ── */
-  if (!id) {
-    // Still loading guild or meetings list
-    if (!guildId || meetings === null) return null;
-    if (meetings.length === 0) {
-      return (
-        <EmptyState
-          title="No meetings yet"
-          body="Parley will add meeting notes here after your first recorded session."
-        />
-      );
-    }
-    return <Navigate to={`/meetings/${meetings[0].id}`} replace />;
-  }
+  if (loading || (!data && !error)) return <NoteSkeleton />;
+  if (error) return <div className="px-8 py-10"><Empty icon={Icon.Doc} title="Couldn't load meeting" body={error} /></div>;
 
-  /* ── detail route ── */
-  if (detailLoading || data === null) return <DocSkeleton />;
-
-  if (detailError) {
-    return <EmptyState title="Couldn't load meeting" body={detailError} />;
-  }
-
-  // Key on meeting id so NoteDocument remounts on meeting switch,
-  // replaying the note-enter fade animation.
   return (
-    <NoteDocument
-      key={data.meeting.id}
-      data={data}
-      todos={todos}
-      guildId={guildId}
-      meetings={meetings ?? []}
-    />
+    <div className="px-6 md:px-8 py-7">
+      <Note key={data.meeting.id} data={data} todos={todos} guildId={guildId} meetings={meetings} refetchTodos={loadTodos} />
+    </div>
   );
 }

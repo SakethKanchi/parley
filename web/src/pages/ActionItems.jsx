@@ -2,153 +2,48 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useGuild } from '../GuildContext.jsx';
+import { Page, PageHead } from '../components/Page.jsx';
+import { Avatar, Icon, Empty } from '../components/ui.jsx';
+import { fmtDateShort } from '../lib/format.js';
 
-/* ── sentinels ────────────────────────────────────────────────────────────
-   Symbols so `===` is unambiguous and no sentinel string can collide with a
-   real person name or day key.
-────────────────────────────────────────────────────────────────────────── */
-const ALL_ASSIGNEES = Symbol('all-assignees');
-const ALL_DAYS = Symbol('all-days');
+const ALL = Symbol('all');
 
-/* ── assignee parsing ─────────────────────────────────────────────────────
-   The summarizer stores multi-person action items as one comma-joined string
-   ("Devin Robinson, Vineel"), and emits the same person under different forms
-   ("Devin" and "Devin Robinson"). Split on commas, then canonicalize: a short
-   name that is a word-prefix of a longer one folds into the longer name. We
-   don't have attendee identity client-side, so prefix-clustering the names we
-   actually see is the best we can do without a backend change.
-────────────────────────────────────────────────────────────────────────── */
+/* The summarizer stores compound assignees ("Devin, Vineel") and name variants
+   ("Devin" vs "Devin Robinson"). Split + canonicalize by word-prefix folding. */
 function splitAssignees(s) {
   if (s == null) return [];
   return s.split(',').map((x) => x.trim()).filter(Boolean);
 }
-
-// name -> canonical (longest variant it word-prefixes). "Devin" -> "Devin Robinson".
 function buildCanonical(names) {
   const uniq = [...new Set(names)];
   const longestFirst = [...uniq].sort((a, b) => b.length - a.length);
   const map = new Map();
   for (const n of uniq) {
     const nl = n.toLowerCase();
-    const canon = longestFirst.find((c) => {
-      const cl = c.toLowerCase();
-      return cl === nl || cl.startsWith(nl + ' ');
-    });
-    map.set(n, canon || n);
+    map.set(n, longestFirst.find((c) => { const cl = c.toLowerCase(); return cl === nl || cl.startsWith(nl + ' '); }) || n);
   }
   return map;
 }
-
-// Canonical people on a todo (deduped). canonMap from buildCanonical.
-function peopleOf(todo, canonMap) {
-  return [...new Set(splitAssignees(todo.assignee).map((n) => canonMap.get(n) || n))];
+function peopleOf(todo, canon) {
+  return [...new Set(splitAssignees(todo.assignee).map((n) => canon.get(n) || n))];
 }
 
-function matchesAssignee(todo, filter, canonMap) {
-  if (filter === ALL_ASSIGNEES) return true;
-  if (filter === null) return todo.assignee == null;
-  return peopleOf(todo, canonMap).includes(filter);
-}
-
-/* ── day helpers ──────────────────────────────────────────────────────────
-   Group by LOCAL calendar day of `created_at` (when the meeting was
-   summarized). Latest day first; "today" is the freshest batch.
-────────────────────────────────────────────────────────────────────────── */
-function localDayKey(iso) {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function dayLabel(key) {
-  const now = new Date();
-  const today = localDayKey(now.toISOString());
-  const y = new Date(now);
-  y.setDate(y.getDate() - 1);
-  const yesterday = localDayKey(y.toISOString());
-  if (key === today) return 'Today';
-  if (key === yesterday) return 'Yesterday';
-  const [yr, mo, dy] = key.split('-').map(Number);
-  return new Date(yr, mo - 1, dy).toLocaleDateString(undefined, {
-    weekday: 'short', month: 'short', day: 'numeric',
-  });
-}
-
-/* ── empty state ──────────────────────────────────────────────────────────*/
-
-function EmptyState({ showCompleted, scopeLabel }) {
-  const qualifier = showCompleted ? '' : 'open ';
-  const subtitle = showCompleted
-    ? 'Action items will appear here once meetings have been summarized.'
-    : 'All caught up. No open tasks here.';
-  return (
-    <div className="flex flex-col items-center justify-center min-h-64 text-center gap-2 py-20">
-      <p className="text-sm font-medium text-ink">
-        No {qualifier}action items{scopeLabel ? ` ${scopeLabel}` : ''}
-      </p>
-      <p className="text-sm text-muted max-w-[38ch] leading-relaxed mt-1">{subtitle}</p>
-    </div>
-  );
-}
-
-/* ── loading skeleton ─────────────────────────────────────────────────────*/
-
-function Skeleton() {
-  return (
-    <div className="space-y-px animate-pulse" role="status" aria-label="Loading action items">
-      {[92, 78, 85, 63, 80, 71].map((w) => (
-        <div key={w} className="flex items-start gap-3 px-3 py-2.5 rounded">
-          <div className="mt-0.5 h-3.5 w-3.5 bg-panel-2 rounded shrink-0" />
-          <div className="flex-1 space-y-1.5">
-            <div className="h-3.5 bg-panel-2 rounded" style={{ width: `${w}%` }} />
-            <div className="h-2.5 bg-panel rounded" style={{ width: `${Math.round(w * 0.42)}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── single todo row ──────────────────────────────────────────────────────*/
-
-function TodoRow({ todo, onToggle, assigneeLabel }) {
+function TodoRow({ todo, onToggle, people }) {
   const [busy, setBusy] = useState(false);
   const done = Boolean(todo.done);
-
-  async function handleChange() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await onToggle(todo);
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  async function change() { if (busy) return; setBusy(true); try { await onToggle(todo); } finally { setBusy(false); } }
   return (
-    <li className="flex items-start gap-3 px-3 py-2.5 rounded hover:bg-panel transition-colors duration-100">
-      <input
-        type="checkbox"
-        checked={done}
-        onChange={handleChange}
-        disabled={busy}
-        className="pcheck mt-0.5"
-        aria-label={todo.task}
-      />
+    <li className="flex items-start gap-3 px-4 py-3 hover:bg-surface-2 transition-colors group">
+      <input type="checkbox" checked={done} onChange={change} disabled={busy} className="pcheck mt-0.5" aria-label={todo.task} />
       <div className="min-w-0 flex-1">
-        <span className={['text-sm leading-relaxed block', done ? 'line-through text-muted' : 'text-ink'].join(' ')}>
-          {todo.task}
-        </span>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          <span className="text-xs text-muted">{assigneeLabel}</span>
-          <span className="text-edge text-xs leading-none select-none" aria-hidden="true">·</span>
-          <Link
-            to={`/meetings/${todo.meeting_id}`}
-            className="text-xs text-muted hover:text-ink transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
-          >
-            View meeting
+        <span className={`text-[14px] leading-relaxed block ${done ? 'line-through text-muted' : 'text-ink'}`}>{todo.task}</span>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          {people.length > 0 ? people.map((p) => (
+            <span key={p} className="inline-flex items-center gap-1.5 chip"><Avatar name={p} size={15} />{p}</span>
+          )) : <span className="chip text-muted">Unassigned</span>}
+          <span className="text-faint text-xs">·</span>
+          <Link to={`/meetings/${todo.meeting_id}`} className="text-xs text-muted hover:text-primary no-underline inline-flex items-center gap-1">
+            <Icon.Doc width={12} height={12} /> {fmtDateShort(todo.created_at)}
           </Link>
         </div>
       </div>
@@ -156,201 +51,99 @@ function TodoRow({ todo, onToggle, assigneeLabel }) {
   );
 }
 
-/* ── select control ───────────────────────────────────────────────────────*/
-
-function Select({ value, onChange, label, children }) {
+function Skeleton() {
   return (
-    <div className="relative inline-flex">
-      <select
-        value={value}
-        onChange={onChange}
-        aria-label={label}
-        className="appearance-none bg-panel text-ink text-sm pl-3 pr-8 py-1.5 rounded border border-edge focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus:border-primary cursor-pointer transition-colors duration-150"
-      >
-        {children}
-      </select>
-      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted leading-none select-none" aria-hidden="true">▾</span>
+    <div className="card p-1">
+      {Array.from({ length: 7 }).map((_, i) => <div key={i} className="h-14 skeleton m-2 rounded-md" />)}
     </div>
   );
 }
 
-/* ── page ─────────────────────────────────────────────────────────────────*/
-
 export default function ActionItems() {
   const { guildId } = useGuild();
-
-  const [assigneeFilter, setAssigneeFilter] = useState(ALL_ASSIGNEES);
-  const [showCompleted, setShowCompleted] = useState(false);
-  // null → follow the latest available day; ALL_DAYS → every day; string → that day key
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [version, setVersion] = useState(0); // bump to refetch after a toggle
-
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [person, setPerson] = useState(ALL); // ALL | null(unassigned) | name
+  const [showDone, setShowDone] = useState(false);
+  const [version, setVersion] = useState(0);
 
-  // Reset filters on guild switch so a stale person/day can't linger
-  useEffect(() => {
-    setAssigneeFilter(ALL_ASSIGNEES);
-    setShowCompleted(false);
-    setSelectedDay(null);
-  }, [guildId]);
+  useEffect(() => { setPerson(ALL); setShowDone(false); }, [guildId]);
 
-  // Fetch all todos for the guild (open-only unless showing completed). Assignee
-  // and day filtering happen client-side — the stored assignee strings are
-  // comma-compound, so a server `assignee = ?` match can't be trusted.
   useEffect(() => {
-    if (!guildId) { setTodos([]); setLoading(false); return; }
+    if (!guildId) { setTodos([]); return; }
     let stale = false;
-    setLoading(true);
-    setError(null);
-    api.todos(guildId, showCompleted ? {} : { open: true })
+    setLoading(true); setError(null);
+    api.todos(guildId, showDone ? {} : { open: true })
       .then((rows) => { if (!stale) { setTodos(Array.isArray(rows) ? rows : []); setLoading(false); } })
-      .catch((err) => { if (!stale) { setError(err?.message || 'Failed to load action items'); setLoading(false); } });
+      .catch((e) => { if (!stale) { setError(e?.message || 'Failed to load'); setLoading(false); } });
     return () => { stale = true; };
-  }, [guildId, showCompleted, version]);
+  }, [guildId, showDone, version]);
 
-  async function handleToggle(todo) {
-    await api.setTodoDone(todo.id, !todo.done);
-    setVersion((v) => v + 1);
-  }
+  async function toggle(t) { await api.setTodoDone(t.id, !t.done); setVersion((v) => v + 1); }
 
-  // Canonical-name map + people list from ALL todos (independent of the day
-  // filter) so switching day never hides a person. Variants like "Devin" and
-  // "Devin Robinson" collapse to one canonical option.
-  const { canonMap, people, hasUnassigned } = useMemo(() => {
-    const raw = [];
-    let unassigned = false;
-    for (const t of todos) {
-      const names = splitAssignees(t.assignee);
-      if (names.length === 0) unassigned = true;
-      raw.push(...names);
-    }
+  const { canon, people, hasUnassigned } = useMemo(() => {
+    const raw = []; let unassigned = false;
+    for (const t of todos) { const ns = splitAssignees(t.assignee); if (ns.length === 0) unassigned = true; raw.push(...ns); }
     const map = buildCanonical(raw);
-    const canonical = [...new Set(raw.map((n) => map.get(n) || n))].sort((a, b) => a.localeCompare(b));
-    return { canonMap: map, people: canonical, hasUnassigned: unassigned };
+    const list = [...new Set(raw.map((n) => map.get(n) || n))].sort((a, b) => a.localeCompare(b));
+    return { canon: map, people: list, hasUnassigned: unassigned };
   }, [todos]);
 
-  // Apply the assignee filter, then derive the available days within that scope.
-  const byAssignee = useMemo(
-    () => todos.filter((t) => matchesAssignee(t, assigneeFilter, canonMap)),
-    [todos, assigneeFilter, canonMap],
-  );
-  const days = useMemo(() => {
-    const set = new Set(byAssignee.map((t) => localDayKey(t.created_at)));
-    return [...set].sort().reverse(); // newest first
-  }, [byAssignee]);
+  // Counts per person for the filter chips.
+  const counts = useMemo(() => {
+    const c = new Map();
+    for (const t of todos) for (const p of peopleOf(t, canon)) c.set(p, (c.get(p) || 0) + 1);
+    return c;
+  }, [todos, canon]);
 
-  // null/unknown selection → newest day. ALL_DAYS → keep. Otherwise the picked
-  // day if it still exists in scope, else fall back to newest.
-  const effectiveDay =
-    selectedDay === ALL_DAYS ? ALL_DAYS
-    : (typeof selectedDay === 'string' && days.includes(selectedDay)) ? selectedDay
-    : (days[0] ?? null);
+  const visible = useMemo(() => todos.filter((t) => {
+    if (person === ALL) return true;
+    if (person === null) return splitAssignees(t.assignee).length === 0;
+    return peopleOf(t, canon).includes(person);
+  }), [todos, person, canon]);
 
-  const visible = useMemo(
-    () => (effectiveDay === ALL_DAYS
-      ? byAssignee
-      : byAssignee.filter((t) => localDayKey(t.created_at) === effectiveDay)),
-    [byAssignee, effectiveDay],
-  );
+  if (!guildId) return <Page><Empty icon={Icon.CheckSquare} title="No server selected" /></Page>;
 
-  // Canonical, deduped assignee label for a row.
-  const labelOf = (t) => {
-    const ps = peopleOf(t, canonMap);
-    return ps.length ? ps.join(', ') : 'Unassigned';
-  };
-
-  function handleAssigneeChange(e) {
-    const v = e.target.value;
-    if (v === '__all__') setAssigneeFilter(ALL_ASSIGNEES);
-    else if (v === '__unassigned__') setAssigneeFilter(null);
-    else setAssigneeFilter(v);
-  }
-
-  function handleDayChange(e) {
-    const v = e.target.value;
-    setSelectedDay(v === '__all_days__' ? ALL_DAYS : v);
-  }
-
-  const assigneeValue =
-    assigneeFilter === ALL_ASSIGNEES ? '__all__'
-    : assigneeFilter === null ? '__unassigned__'
-    : assigneeFilter;
-  const dayValue = effectiveDay === ALL_DAYS ? '__all_days__' : (effectiveDay ?? '__all_days__');
-
-  const scopeLabel =
-    effectiveDay && effectiveDay !== ALL_DAYS ? `for ${dayLabel(effectiveDay)}` : '';
-
-  if (!guildId) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-64 text-center py-20">
-        <p className="text-sm text-muted">No guild selected.</p>
-      </div>
-    );
-  }
+  const openCount = todos.filter((t) => !t.done).length;
 
   return (
-    <div className="max-w-[72ch] mx-auto pb-16 pt-2">
-      <header className="mb-6">
-        <h1 className="font-display text-xl font-semibold text-ink leading-tight">Action items</h1>
-      </header>
+    <Page max="900px">
+      <PageHead
+        title="Action items"
+        subtitle={`${openCount} open across ${people.length} ${people.length === 1 ? 'person' : 'people'}`}
+        actions={
+          <label className="flex items-center gap-2 text-sm text-muted cursor-pointer select-none">
+            <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="pcheck h-4 w-4" />
+            Show completed
+          </label>
+        }
+      />
 
-      {/* Controls: assignee + day are the primary filters */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <Select value={assigneeValue} onChange={handleAssigneeChange} label="Filter by assignee">
-          <option value="__all__">All assignees</option>
-          {hasUnassigned && <option value="__unassigned__">Unassigned</option>}
-          {people.map((p) => <option key={p} value={p}>{p}</option>)}
-        </Select>
-
-        <Select value={dayValue} onChange={handleDayChange} label="Filter by day">
-          {days.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
-          <option value="__all_days__">All days</option>
-        </Select>
-
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer select-none ml-auto">
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={(e) => setShowCompleted(e.target.checked)}
-            className="accent-primary cursor-pointer"
-          />
-          Show completed
-        </label>
+      {/* Person filter chips */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        <button onClick={() => setPerson(ALL)} className={`chip ${person === ALL ? '!bg-primary-soft !text-ink' : ''}`}>
+          Everyone <span className="text-faint">{todos.length}</span>
+        </button>
+        {people.map((p) => (
+          <button key={p} onClick={() => setPerson(p)} className={`chip ${person === p ? '!bg-primary-soft !text-ink' : ''}`}>
+            <Avatar name={p} size={15} />{p} <span className="text-faint">{counts.get(p) || 0}</span>
+          </button>
+        ))}
+        {hasUnassigned && (
+          <button onClick={() => setPerson(null)} className={`chip ${person === null ? '!bg-primary-soft !text-ink' : ''}`}>Unassigned</button>
+        )}
       </div>
 
-      {loading && <Skeleton />}
-
-      {!loading && error && (
-        <p className="text-sm text-error py-4" role="alert">Could not load action items: {error}</p>
-      )}
-
-      {!loading && !error && visible.length === 0 && (
-        <EmptyState showCompleted={showCompleted} scopeLabel={scopeLabel} />
-      )}
-
-      {!loading && !error && visible.length > 0 && (
-        effectiveDay === ALL_DAYS ? (
-          // Grouped by day, newest first
-          days
-            .filter((d) => visible.some((t) => localDayKey(t.created_at) === d))
-            .map((d) => (
-              <section key={d} className="mb-6">
-                <h2 className="text-xs font-semibold text-muted mb-1.5 px-3">{dayLabel(d)}</h2>
-                <ul className="space-y-px" role="list">
-                  {visible
-                    .filter((t) => localDayKey(t.created_at) === d)
-                    .map((todo) => <TodoRow key={todo.id} todo={todo} onToggle={handleToggle} assigneeLabel={labelOf(todo)} />)}
-                </ul>
-              </section>
-            ))
+      {loading ? <Skeleton />
+        : error ? <Empty icon={Icon.CheckSquare} title="Couldn't load action items" body={error} />
+        : visible.length === 0 ? (
+          <div className="card"><Empty icon={Icon.Check} title={showDone ? 'No action items' : 'All caught up'} body={showDone ? 'Action items appear here once meetings are summarized.' : 'No open tasks in this view.'} /></div>
         ) : (
-          <ul className="space-y-px" role="list">
-            {visible.map((todo) => <TodoRow key={todo.id} todo={todo} onToggle={handleToggle} assigneeLabel={labelOf(todo)} />)}
+          <ul className="card p-1 divide-y divide-border">
+            {visible.map((t) => <TodoRow key={t.id} todo={t} onToggle={toggle} people={peopleOf(t, canon)} />)}
           </ul>
-        )
-      )}
-    </div>
+        )}
+    </Page>
   );
 }

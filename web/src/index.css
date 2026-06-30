@@ -2,91 +2,216 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Layout geometry ───────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════
+   Parley design system
+   A calm, premium meeting-intelligence dashboard (Fathom / Linear register).
+   Brand: indigo-violet primary, emerald accent. Dark-first, light is a
+   first-class reading mode.
+   ════════════════════════════════════════════════════════════════════════ */
+
 :root {
-  --header-h: 3rem;   /* 48px — compact enough to not compete with content   */
-  --rail-w:   220px;  /* meetings sidebar — enough for channel + date labels  */
+  --sidebar-w: 248px;
+  --topbar-h: 60px;
+  --content-max: 1180px;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-lg: 20px;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Bricolage Grotesque", var(--font-sans);
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 }
 
-/* ─── Dark theme (default) ─────────────────────────────────────────── */
+/* ─── Dark theme (default) ──────────────────────────────────────────────── */
 [data-theme="dark"] {
-  --bg:          #08090E;
-  --bg-elevated: #0B0D13;
-  --panel:       #11131B;
-  --panel-2:     #191C28;
-  --primary:     #6B70DB;
-  --accent:      #35C46E;
-  --ink:         #E9EBF4;
-  --muted:       #888FA6;
-  --edge:        #232838;
-  --error:       #E56B6B;
+  --bg:            #07080C;   /* app canvas */
+  --bg-2:          #0A0C12;   /* sidebar / subtle zones */
+  --surface:       #0E1118;   /* cards */
+  --surface-2:     #141824;   /* nested / hover cards */
+  --surface-3:     #1B2030;   /* inputs, chips */
+  --border:        #1E2433;   /* hairline */
+  --border-strong: #2A3142;   /* emphasized border */
+
+  --ink:           #ECEEF6;   /* primary text */
+  --ink-2:         #AAB1C6;   /* secondary text */
+  --muted:         #6E768E;   /* tertiary / meta */
+  --faint:         #444B5E;   /* disabled / ghost */
+
+  --primary:       #7C82F2;   /* brand indigo-violet */
+  --primary-ink:   #FFFFFF;   /* text on primary */
+  --primary-soft:  rgba(124,130,242,0.14);
+  --primary-glow:  rgba(124,130,242,0.30);
+  --accent:        #3DD68C;   /* emerald */
+  --accent-soft:   rgba(61,214,140,0.14);
+  --warn:          #F2B450;
+  --warn-soft:     rgba(242,180,80,0.14);
+  --error:         #F2786E;
+  --error-soft:    rgba(242,120,110,0.14);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow:    0 6px 24px -8px rgba(0,0,0,0.55);
+  --shadow-lg: 0 24px 60px -20px rgba(0,0,0,0.7);
+  --ring:      0 0 0 1px var(--border);
+
+  color-scheme: dark;
 }
 
-/* ─── Light theme ───────────────────────────────────────────────────── */
-/*
- * Palette rationale (impeccable product register):
- *   - No warm/cream: all neutrals tilt toward 265° (brand hue), not warm
- *   - bg #F5F6FA: near-white with cool blue tint (OKLCH ~97% L)
- *   - bg-elevated #FFFFFF: pure white for cards and modals
- *   - panel #E8EAF2: sidebar / panel surface (OKLCH ~93% L)
- *   - panel-2 #DEE0EC: nested panel (OKLCH ~90% L)
- *   - primary #4755E6: same 265° hue, darkened to ~46% L → white text 5.6:1 ✓
- *   - accent #0B7830: 155° hue, darkened to WCAG L ~0.137 → 5.2:1 on bg ✓
- *     (original #1A964A only achieved 3.5:1 — WCAG AA fail; fixed here)
- *   - ink #0F1018: near-black 12% L, blue tint → 17:1 on bg ✓
- *   - muted #565B73: 44% L blue-grey → 6:1 on bg, passes WCAG AA ✓
- *   - edge #C5C7D8: cool border (OKLCH ~84% L)
- */
+/* ─── Light theme ───────────────────────────────────────────────────────── */
 [data-theme="light"] {
-  --bg:          #F5F6FA;
-  --bg-elevated: #FFFFFF;
-  --panel:       #E8EAF2;
-  --panel-2:     #DEE0EC;
-  --primary:     #4755E6;
-  --accent:      #0B7830;
-  --ink:         #0F1018;
-  --muted:       #565B73;
-  --edge:        #C5C7D8;
-  --error:       #B83232;
+  --bg:            #F6F7FB;
+  --bg-2:          #FFFFFF;
+  --surface:       #FFFFFF;
+  --surface-2:     #F4F5FA;
+  --surface-3:     #EDEFF6;
+  --border:        #E4E7F0;
+  --border-strong: #D2D7E5;
+
+  --ink:           #11131C;
+  --ink-2:         #454B61;
+  --muted:         #6B7188;
+  --faint:         #A6ACC0;
+
+  --primary:       #5159E6;
+  --primary-ink:   #FFFFFF;
+  --primary-soft:  rgba(81,89,230,0.10);
+  --primary-glow:  rgba(81,89,230,0.18);
+  --accent:        #0E9F5B;
+  --accent-soft:   rgba(14,159,91,0.12);
+  --warn:          #B9791A;
+  --warn-soft:     rgba(185,121,26,0.12);
+  --error:         #CC4A40;
+  --error-soft:    rgba(204,74,64,0.10);
+
+  --shadow-sm: 0 1px 2px rgba(20,24,40,0.06);
+  --shadow:    0 8px 28px -12px rgba(30,36,60,0.18);
+  --shadow-lg: 0 28px 64px -24px rgba(30,36,60,0.26);
+  --ring:      0 0 0 1px var(--border);
+
+  color-scheme: light;
 }
 
-/* ─── Base ──────────────────────────────────────────────────────────── */
-body { @apply bg-bg text-ink font-sans; }
-h1, h2, h3 { @apply font-display; text-wrap: balance; }
+/* ─── Base ──────────────────────────────────────────────────────────────── */
+* { border-color: var(--border); }
 
-/* ─── Note cross-fade — replays on meeting switch via key= ─────────── */
-@keyframes note-fade-in {
-  from { opacity: 0; transform: translateY(5px); }
-  to   { opacity: 1; transform: translateY(0); }
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-.note-enter {
-  animation: note-fade-in 180ms ease-out;
+h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; text-wrap: balance; }
+
+::selection { background: var(--primary-glow); color: var(--ink); }
+
+/* Scrollbars — slim and theme-aware */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 9px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ─── Reusable component layer ──────────────────────────────────────────── */
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .card-hover {
+    transition: border-color .15s ease, background .15s ease, transform .15s ease, box-shadow .15s ease;
+  }
+  .card-hover:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+    box-shadow: var(--shadow);
+  }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: .375rem;
+    padding: .125rem .5rem;
+    font-size: 12px; line-height: 1.4;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+    padding: .5rem .85rem; border-radius: var(--radius-sm);
+    font-size: 13.5px; font-weight: 600; line-height: 1;
+    cursor: pointer; transition: all .14s ease;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .btn-primary { background: var(--primary); color: var(--primary-ink); box-shadow: 0 1px 0 rgba(0,0,0,.1), 0 8px 20px -12px var(--primary-glow); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { background: var(--surface-2); color: var(--ink); border-color: var(--border); }
+  .btn-ghost:hover { background: var(--surface-3); border-color: var(--border-strong); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+
+  .input {
+    width: 100%; background: var(--surface-3); color: var(--ink);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: .55rem .75rem; font-size: 14px; line-height: 1.3;
+    transition: border-color .14s ease, box-shadow .14s ease;
+  }
+  .input::placeholder { color: var(--muted); }
+  .input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+
+  .nav-link {
+    display: flex; align-items: center; gap: .7rem;
+    padding: .5rem .7rem; border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 500; color: var(--ink-2);
+    transition: all .13s ease; text-decoration: none; position: relative;
+  }
+  .nav-link:hover { background: var(--surface-2); color: var(--ink); }
+  .nav-link.active { background: var(--primary-soft); color: var(--ink); font-weight: 600; }
+  .nav-link.active::before {
+    content: ""; position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 18px; border-radius: 3px; background: var(--primary);
+  }
+
+  .stat-value { font-family: var(--font-display); font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+
+  /* Custom checkbox */
+  .pcheck {
+    appearance: none; flex-shrink: 0; height: 18px; width: 18px;
+    border-radius: 6px; border: 1.5px solid var(--border-strong);
+    background: transparent; position: relative; cursor: pointer;
+    transition: all .14s ease;
+  }
+  .pcheck:hover { border-color: var(--muted); }
+  .pcheck:checked { background: var(--accent); border-color: var(--accent); }
+  .pcheck:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 2px;
+    width: 4px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .pcheck:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-soft); }
+  .pcheck:disabled { opacity: .5; cursor: default; }
+}
+
+/* ─── Motion ────────────────────────────────────────────────────────────── */
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+
+.animate-fade-up { animation: fade-up .32s cubic-bezier(.22,.61,.36,1) both; }
+.animate-fade-in { animation: fade-in .25s ease both; }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .note-enter { animation: none; }
-}
-
-/* ─── Custom checkbox — the native box looks unfinished ─────────────── */
-@layer components {
-  .pcheck {
-    @apply appearance-none shrink-0 h-[18px] w-[18px] rounded-[5px] border border-edge bg-transparent relative cursor-pointer transition-colors duration-150;
-  }
-  .pcheck:hover { border-color: var(--muted); }
-  .pcheck:checked { background-color: var(--accent); border-color: var(--accent); }
-  .pcheck:checked::after {
-    content: "";
-    position: absolute;
-    left: 6px; top: 2.5px;
-    width: 4px; height: 9px;
-    border: solid #fff;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-  }
-  .pcheck:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--primary);
-  }
-  .pcheck:disabled { @apply opacity-50 cursor-default; }
+  .animate-fade-up, .animate-fade-in, .skeleton { animation: none; }
 }

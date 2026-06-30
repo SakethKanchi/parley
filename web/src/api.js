@@ -3,6 +3,7 @@ const json = (r) => { if (!r.ok) return r.json().then((e) => Promise.reject(new 
 export const api = {
   guilds: () => fetch('/api/guilds').then(json),
   meetings: (g) => fetch(`/api/guilds/${g}/meetings`).then(json),
+  stats: (g) => fetch(`/api/guilds/${g}/stats`).then(json),
   meeting: (id) => fetch(`/api/meetings/${id}`).then(json),
   todos: (g, { open, assignee } = {}) => {
     const p = new URLSearchParams();

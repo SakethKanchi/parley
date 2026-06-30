@@ -24,14 +24,15 @@ export function SystemProvider({ children }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // While the bot is connecting after onboarding, poll until it settles.
+  // While the bot is connecting after onboarding, or the local sidecar is
+  // booting (model load takes a few seconds), poll until it settles.
   useEffect(() => {
-    if (!status?.managed) return;
-    const st = status.bot?.state;
-    if (st !== 'starting') return;
+    const botStarting = status?.managed && status.bot?.state === 'starting';
+    const sidecarStarting = status?.sidecar?.state === 'starting';
+    if (!botStarting && !sidecarStarting) return;
     const t = setInterval(refresh, 1500);
     return () => clearInterval(t);
-  }, [status?.bot?.state, status?.managed, refresh]);
+  }, [status?.bot?.state, status?.managed, status?.sidecar?.state, refresh]);
 
   return <Ctx.Provider value={{ status, loading, refresh }}>{children}</Ctx.Provider>;
 }

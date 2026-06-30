@@ -10,6 +10,7 @@
     "sidecar": "stt_sidecar/.venv/bin/python stt_sidecar/server.py",
     "make:art": "node scripts/make-brand-art.mjs",
     "web": "node --env-file-if-exists=.env scripts/web-standalone.mjs",
+    "web:stt": "node --env-file-if-exists=.env scripts/web-standalone-stt.mjs",
     "web:dev": "npm --prefix web run dev",
     "web:build": "npm --prefix web install && npm --prefix web run build"
   },

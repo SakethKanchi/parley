@@ -331,8 +331,17 @@ The rest of the dashboard has a Dashboard overview, a Meetings browser
 "Ask this meeting" box, an Action items board filterable by person, an Analytics
 page (meetings-per-day, talk-time and word leaderboards), full-text Search, a
 Commands reference (every slash command, grouped), and Settings (summarizer
-provider/model picker, in-app API-key editing, whisper model, languages,
+provider/model picker, in-app API-key editing, transcription provider, languages,
 delivery).
+
+**Transcription, from the browser.** Settings → Transcription lets you pick the
+speech-to-text backend per server (local sidecar, Groq, or OpenAI), paste the
+cloud API key inline, and choose the model. The default local **sidecar** has a
+live status pill with **Start / Stop / Restart** buttons, so you can run whisper
+locally on demand. Switching a server to a cloud API automatically stops the
+sidecar to free CPU/RAM (and starts it again when you switch back) — or toggle it
+yourself any time. (In Docker the sidecar is its own container and is managed by
+Compose, so the dashboard shows that instead of a Start button.)
 
 **Recover failed meetings without the CLI.** If a meeting fails (the STT sidecar
 was down, or the summarizer hit a transient error), it shows up with a clear

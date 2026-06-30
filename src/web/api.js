@@ -24,7 +24,17 @@ function guildName(client, id, dbNames = {}) {
   return client?.guilds?.cache?.get(id)?.name || dbNames[id] || id;
 }
 
-export function apiRouter({ db, bot = null, client = null }) {
+// Does any configured guild still use the local sidecar for transcription?
+// Default provider is 'sidecar', so an unconfigured guild counts as sidecar.
+function anyGuildUsesSidecar(db) {
+  try {
+    const rows = db.sql.prepare(`SELECT stt_provider FROM guild_config`).all();
+    if (rows.length === 0) return true;
+    return rows.some((row) => (row.stt_provider ?? 'sidecar') === 'sidecar');
+  } catch { return true; }
+}
+
+export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
   const r = Router();
   // The live Discord client may not exist yet (bot starts lazily once creds are
   // set). Always resolve it fresh from the controller so routes pick it up the
@@ -181,11 +191,25 @@ export function apiRouter({ db, bot = null, client = null }) {
     });
   });
 
-  r.patch('/guilds/:g/config', (req, res) => {
+  r.patch('/guilds/:g/config', async (req, res) => {
     const result = validateSetup(req.body, env);
     if (!result.ok) return res.status(400).json({ error: result.error });
     const config = setGuildConfig(db, req.params.g, result.patch);
-    res.json({ ok: true, config });
+    // Follow the transcription backend with the local sidecar process: start it
+    // when a guild switches to the sidecar, and stop it when no guild needs it
+    // anymore (switched everything to a cloud API). Best-effort, non-blocking.
+    let sidecarStatus = sidecar ? sidecar.status() : null;
+    if (sidecar && sidecar.managed() && result.patch.sttProvider !== undefined) {
+      try {
+        if (result.patch.sttProvider === 'sidecar') {
+          await sidecar.start();
+        } else if (!anyGuildUsesSidecar(db)) {
+          await sidecar.stop();
+        }
+        sidecarStatus = sidecar.status();
+      } catch { /* surface via status only */ }
+    }
+    res.json({ ok: true, config, sidecar: sidecarStatus });
   });
 
   // Live model list for the chosen provider (Ollama is queried for installed tags).
@@ -238,6 +262,7 @@ export function apiRouter({ db, bot = null, client = null }) {
             user: c?.user ? { tag: c.user.tag, id: c.user.id } : null, guildCount: c?.guilds?.cache?.size ?? 0 },
       managed: !!bot,
       sttUrl: env.sttUrl,
+      sidecar: sidecar ? sidecar.status() : null,
     });
   });
 
@@ -272,6 +297,29 @@ export function apiRouter({ db, bot = null, client = null }) {
       else if (action === 'stop') await bot.stop();
       else return res.status(400).json({ error: `Unknown action "${action}".` });
       res.json({ ok: true, bot: bot.status() });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Start/stop/restart the local STT sidecar process from the dashboard. The
+  // sidecar is a single global process (transcription backend), so this is not
+  // per-guild. Unmanaged in Docker (separate container) — report that clearly.
+  r.post('/system/sidecar/:action', async (req, res) => {
+    if (!sidecar) return res.status(400).json({ error: 'Sidecar is not managed by this server.' });
+    const { action } = req.params;
+    if (!sidecar.managed() && action !== 'status') {
+      return res.status(400).json({ error: sidecar.status().error || 'Local sidecar is not manageable here (running in Docker or STT_URL is remote).', sidecar: sidecar.status() });
+    }
+    try {
+      let result = { ok: true };
+      if (action === 'start') result = await sidecar.start();
+      else if (action === 'restart') result = await sidecar.restart();
+      else if (action === 'stop') result = await sidecar.stop();
+      else if (action !== 'status') return res.status(400).json({ error: `Unknown action "${action}".` });
+      const status = sidecar.status();
+      if (!result.ok) return res.status(502).json({ error: result.error || 'Sidecar action failed.', sidecar: status });
+      res.json({ ok: true, sidecar: status });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

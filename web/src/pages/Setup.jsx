@@ -128,6 +128,70 @@ function KeyEditor({ provider, present, onChanged }) {
   );
 }
 
+/* ── Local sidecar status + on/off control ─────────────────────────────────
+   The sidecar is the local faster-whisper process. It's a single global backend
+   (not per-guild), so this lives off `sys.sidecar` from /system/status. Shows a
+   live state pill and a Start/Stop button; hidden entirely when the sidecar is
+   unmanaged here (e.g. running as its own Docker container). */
+function SidecarControl({ sys, onChanged }) {
+  const sc = sys?.sidecar;
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  if (!sc) return null; // standalone web server with no controller attached
+
+  const map = {
+    running: { label: 'Running', color: 'var(--accent)', bg: 'var(--accent-soft)' },
+    starting: { label: 'Starting…', color: 'var(--warn)', bg: 'var(--warn-soft)' },
+    error: { label: 'Stopped', color: 'var(--error)', bg: 'var(--error-soft)' },
+    stopped: { label: 'Stopped', color: 'var(--muted)', bg: 'var(--surface-3)' },
+  };
+  const s = map[sc.state] || map.stopped;
+  const running = sc.state === 'running';
+
+  async function act(action) {
+    setBusy(true); setErr(null);
+    try { await api.sidecarAction(action); await onChanged?.(); }
+    catch (e) { setErr(e?.message || `Failed to ${action} sidecar`); }
+    finally { setBusy(false); }
+  }
+
+  if (!sc.managed) {
+    return (
+      <div className="rounded-md bg-surface-2 px-3.5 py-3 text-xs text-muted">
+        The local whisper sidecar is managed outside this process
+        {sc.url ? <> (<code className="text-ink-2">{sc.url}</code>)</> : null}. In Docker it runs as its
+        own container and starts/stops with <code className="text-ink-2">docker compose</code>.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-border px-3.5 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-medium text-ink">Local sidecar</span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: s.color, background: s.bg }}>
+            <span style={{ width: 6, height: 6, borderRadius: 6, background: s.color }} />
+            {s.label}{sc.external ? ' · external' : ''}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {running
+            ? <button onClick={() => act('stop')} disabled={busy} className="btn btn-ghost !py-1.5">{busy ? '…' : 'Stop'}</button>
+            : <button onClick={() => act('start')} disabled={busy} className="btn btn-primary !py-1.5">{busy ? 'Starting…' : 'Start sidecar'}</button>}
+          {running && <button onClick={() => act('restart')} disabled={busy} className="btn btn-ghost !py-1.5">Restart</button>}
+        </div>
+      </div>
+      <p className="text-xs text-muted mt-2">
+        {running
+          ? 'Transcribing locally on this machine. Turn it off to free CPU/RAM when using a cloud API.'
+          : 'Off. Start it to transcribe locally without a cloud API.'}
+      </p>
+      {(err || sc.error) && <p className="text-xs text-error mt-1.5">{err || sc.error}</p>}
+    </div>
+  );
+}
+
 /* ── Connection card (server-wide Discord + STT settings) ────────────────── */
 function ConnectionCard({ sys, onChanged }) {
   const [open, setOpen] = useState(false);
@@ -216,6 +280,9 @@ export default function Setup() {
       const r = await api.saveConfig(guildId, patch);
       setData((d) => ({ ...d, config: r.config }));
       setMsg('Saved'); setMsgErr(false);
+      // Switching the transcription backend may have auto-started/stopped the
+      // local sidecar; refresh system status so its pill reflects reality.
+      if (patch.sttProvider !== undefined) refreshSys?.();
     } catch (e) { setMsg(e.message); setMsgErr(true); }
     setTimeout(() => setMsg(''), 2400);
   };
@@ -300,23 +367,31 @@ export default function Setup() {
           )}
 
           {c.sttProvider === 'sidecar' ? (
-            <Field label="Whisper model" hint="Larger is more accurate but slower on CPU.">
-              <div className="relative">
-                <select className={sel} value={c.whisperModel} onChange={(e) => save({ whisperModel: e.target.value })}>
-                  {WHISPER.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-                <Chevron />
-              </div>
-            </Field>
+            <>
+              <Field label="Whisper model" hint="Larger is more accurate but slower on CPU.">
+                <div className="relative">
+                  <select className={sel} value={c.whisperModel} onChange={(e) => save({ whisperModel: e.target.value })}>
+                    {WHISPER.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <Chevron />
+                </div>
+              </Field>
+              <SidecarControl sys={sys} onChanged={refreshSys} />
+            </>
           ) : (
-            <Field label="Model" hint="Cloud transcription model.">
-              <div className="relative">
-                <select className={sel} value={c.sttModel || (sttModels[0] ?? '')} onChange={(e) => save({ sttModel: e.target.value })}>
-                  {sttModels.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-                <Chevron />
-              </div>
-            </Field>
+            <>
+              <Field label="Model" hint="Cloud transcription model.">
+                <div className="relative">
+                  <select className={sel} value={c.sttModel || (sttModels[0] ?? '')} onChange={(e) => save({ sttModel: e.target.value })}>
+                    {sttModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <Chevron />
+                </div>
+              </Field>
+              {sys?.sidecar?.managed && sys?.sidecar?.running && (
+                <SidecarControl sys={sys} onChanged={refreshSys} />
+              )}
+            </>
           )}
 
           <Field label="Spoken language">

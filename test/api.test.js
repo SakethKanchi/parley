@@ -13,6 +13,27 @@ function appWith(db) {
   return app;
 }
 
+// A minimal in-memory sidecar controller stub mirroring SidecarController's
+// surface, so we can exercise the /system/sidecar routes + auto start/stop.
+function fakeSidecar({ managed = true } = {}) {
+  const s = {
+    _managed: managed, state: 'stopped', calls: [],
+    managed() { return this._managed; },
+    status() { return { state: this.state, error: null, running: this.state === 'running', managed: this._managed, external: false, url: 'http://127.0.0.1:8000', log: [] }; },
+    async start() { this.calls.push('start'); this.state = 'running'; return { ok: true, state: 'running' }; },
+    async stop() { this.calls.push('stop'); this.state = 'stopped'; return { ok: true, state: 'stopped' }; },
+    async restart() { this.calls.push('restart'); this.state = 'running'; return { ok: true, state: 'running' }; },
+  };
+  return s;
+}
+
+function appWithSidecar(db, sidecar) {
+  const app = express();
+  app.use(express.json());
+  app.use('/api', apiRouter({ db, client: null, sidecar }));
+  return app;
+}
+
 async function listen(app) {
   const server = app.listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
@@ -64,6 +85,64 @@ test('GET config returns providers + PATCH validates', async () => {
     assert.equal(ok.status, 200);
     assert.equal((await ok.json()).config.whisperModel, 'base');
   } finally { close(); }
+});
+
+test('GET config includes sttProviders with the sidecar default', async () => {
+  const db = openDb(':memory:');
+  const { base, close } = await listen(appWith(db));
+  try {
+    const cfg = await (await fetch(`${base}/api/guilds/g1/config`)).json();
+    assert.ok(Array.isArray(cfg.sttProviders));
+    assert.deepEqual(cfg.sttProviders.map((p) => p.provider), ['sidecar', 'groq', 'openai']);
+    assert.equal(cfg.config.sttProvider, 'sidecar'); // default
+  } finally { close(); }
+});
+
+test('POST /system/sidecar start/stop drives the controller', async () => {
+  const db = openDb(':memory:');
+  const sidecar = fakeSidecar();
+  const { base, close } = await listen(appWithSidecar(db, sidecar));
+  try {
+    const started = await fetch(`${base}/api/system/sidecar/start`, { method: 'POST' });
+    assert.equal(started.status, 200);
+    assert.equal((await started.json()).sidecar.state, 'running');
+    const stopped = await fetch(`${base}/api/system/sidecar/stop`, { method: 'POST' });
+    assert.equal((await stopped.json()).sidecar.state, 'stopped');
+    assert.deepEqual(sidecar.calls, ['start', 'stop']);
+    // status surfaces in /system/status too
+    const sys = await (await fetch(`${base}/api/system/status`)).json();
+    assert.equal(sys.sidecar.state, 'stopped');
+  } finally { close(); }
+});
+
+test('switching a guild to a cloud STT provider auto-stops the sidecar', async () => {
+  const db = openDb(':memory:');
+  // Make groq usable so validation passes (presence-only check).
+  process.env.GROQ_API_KEY = 'gsk_test';
+  const { config: env } = await import('../src/config/env.js');
+  env.groq.apiKey = 'gsk_test';
+  const sidecar = fakeSidecar();
+  await sidecar.start(); // pretend it was running
+  sidecar.calls.length = 0;
+  const { base, close } = await listen(appWithSidecar(db, sidecar));
+  try {
+    const r = await fetch(`${base}/api/guilds/g1/config`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sttProvider: 'groq' }),
+    });
+    const body = await r.json();
+    assert.equal(body.config.sttProvider, 'groq');
+    assert.equal(body.sidecar.state, 'stopped');
+    assert.ok(sidecar.calls.includes('stop'));
+
+    // switching back to sidecar starts it again
+    const back = await fetch(`${base}/api/guilds/g1/config`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sttProvider: 'sidecar' }),
+    });
+    assert.equal((await back.json()).sidecar.state, 'running');
+    assert.ok(sidecar.calls.includes('start'));
+  } finally { close(); delete process.env.GROQ_API_KEY; env.groq.apiKey = undefined; }
 });
 
 test('GET /api/guilds merges live client cache with db guilds (no duplicates)', async () => {

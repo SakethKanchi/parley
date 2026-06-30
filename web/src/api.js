@@ -29,4 +29,5 @@ export const api = {
   systemStatus: () => fetch('/api/system/status').then(json),
   setConnection: (patch) => fetch('/api/system/connection', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }).then(json),
   botAction: (action) => fetch(`/api/system/bot/${action}`, { method: 'POST' }).then(json),
+  sidecarAction: (action) => fetch(`/api/system/sidecar/${action}`, { method: 'POST' }).then(json),
 };

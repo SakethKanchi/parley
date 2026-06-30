@@ -230,21 +230,37 @@ All providers return the same structured-notes shape, so output is consistent re
 - Audio is transcribed **on the machine running the bot**. No audio is uploaded anywhere; only the final transcript text is sent to your chosen summarizer (and nothing leaves your network at all with Ollama).
 - Recording people's voices is subject to consent laws that vary by jurisdiction (some require all-party consent). **You are responsible for obtaining consent from all participants.**
 
-## Web admin UI (local)
+## Web dashboard (local)
 
-Run `npm run web:build` once, then start the bot with the UI enabled:
+Parley ships a full local web dashboard for browsing meetings, reading AI
+notes, working the action-item list, searching transcripts, viewing talk-time
+analytics, and editing per-guild config.
 
+Build the UI once, then start the bot with it enabled:
+
+    npm run web:build
     WEB_UI=1 npm start
 
-Open http://127.0.0.1:3000 to browse meetings, work the TODO list, search
-transcripts, and edit per-guild config.
+Open http://127.0.0.1:3000. The dashboard has a Dashboard overview, a Meetings
+browser (grid/list), per-meeting reading view with collapsible transcript and an
+"Ask this meeting" box, an Action items board filterable by person, an Analytics
+page (meetings-per-day, talk-time and word leaderboards), full-text Search, and
+Settings.
+
+**Develop the UI without the bot.** `npm run web` serves the API + built UI
+against your existing `meetings.db` with no Discord token required, so you can
+work on the dashboard against real data:
+
+    npm run web:build      # build the UI once
+    npm run web            # API + UI on http://127.0.0.1:3000
+
+For hot-reload UI development, run `npm run web` (the API on :3000) in one
+terminal and `npm run web:dev` (Vite on :5173, proxies `/api` to :3000) in
+another.
 
 **Security:** the UI binds to 127.0.0.1 only and has NO authentication. Do not
 port-forward or reverse-proxy it to the internet without adding auth first. It
 never accepts or displays API keys — those stay in `.env`.
-
-For UI development with hot reload run `npm run web:dev` (proxies `/api` to the
-bot on port 3000) in a second terminal while the bot runs with `WEB_UI=1`.
 
 ## 🛠️ Development
 

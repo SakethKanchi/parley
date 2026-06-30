@@ -108,6 +108,9 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; text
 
 ::selection { background: var(--primary-glow); color: var(--ink); }
 
+/* Brand search highlight (overrides the UA yellow <mark>). */
+mark { background: var(--primary-soft); color: var(--ink); border-radius: 4px; padding: 0 2px; }
+
 /* Scrollbars — slim and theme-aware */
 * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }

@@ -35,6 +35,11 @@ CREATE TABLE IF NOT EXISTS guild_config (
   whisper_model TEXT, notes_channel_id TEXT,
   use_thread INTEGER, auto_join INTEGER, language TEXT, summary_language TEXT
 );
+CREATE TABLE IF NOT EXISTS guilds (
+  guild_id TEXT PRIMARY KEY,
+  name TEXT,
+  updated_at TEXT
+);
 CREATE TABLE IF NOT EXISTS todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   guild_id TEXT NOT NULL,

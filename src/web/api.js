@@ -10,6 +10,8 @@ import { askMeeting } from '../adapters/summarizer/ask.js';
 import { getSummarizer } from '../adapters/summarizer/index.js';
 import { buildTranscript, computeTalkTime } from '../pipeline/summarize.js';
 import { resolveSummaryLanguage } from '../adapters/summarizer/languages.js';
+import { MODEL_SUGGESTIONS, fetchOllamaModels } from '../adapters/summarizer/models.js';
+import { secretStatus, setProviderKey, isSecretProvider } from '../store/secrets.js';
 
 function audioDir(id) {
   return join(env.dataDir, 'audio', String(id));
@@ -137,6 +139,8 @@ export function apiRouter({ db, client }) {
       config: getGuildConfig(db, req.params.g),
       providers: availableProviders(env),
       channels,
+      models: MODEL_SUGGESTIONS,
+      secrets: secretStatus(env),
     });
   });
 
@@ -145,6 +149,35 @@ export function apiRouter({ db, client }) {
     if (!result.ok) return res.status(400).json({ error: result.error });
     const config = setGuildConfig(db, req.params.g, result.patch);
     res.json({ ok: true, config });
+  });
+
+  // Live model list for the chosen provider (Ollama is queried for installed tags).
+  r.get('/providers/:provider/models', async (req, res) => {
+    const { provider } = req.params;
+    const suggested = MODEL_SUGGESTIONS[provider] || [];
+    if (provider === 'ollama') {
+      const installed = await fetchOllamaModels(env.ollama.url);
+      // Installed first (what the user actually has), then suggestions not already listed.
+      const merged = [...installed, ...suggested.filter((m) => !installed.includes(m))];
+      return res.json({ models: merged, installed });
+    }
+    res.json({ models: suggested, installed: [] });
+  });
+
+  // Set or clear a provider's API key. Persists to .env and updates the live
+  // config so it takes effect immediately. Never returns the key value.
+  r.put('/providers/:provider/key', async (req, res) => {
+    const { provider } = req.params;
+    if (!isSecretProvider(provider)) {
+      return res.status(400).json({ error: `Provider "${provider}" has no editable API key.` });
+    }
+    const value = typeof req.body?.key === 'string' ? req.body.key : '';
+    try {
+      const secrets = await setProviderKey(provider, value, { env });
+      res.json({ ok: true, secrets, providers: availableProviders(env) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   r.post('/guilds/:g/meetings/:id/ask', async (req, res) => {

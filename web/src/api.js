@@ -22,4 +22,6 @@ export const api = {
   search: (g, q) => fetch(`/api/guilds/${g}/search?q=${encodeURIComponent(q)}`).then(json),
   config: (g) => fetch(`/api/guilds/${g}/config`).then(json),
   saveConfig: (g, patch) => fetch(`/api/guilds/${g}/config`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }).then(json),
+  providerModels: (provider) => fetch(`/api/providers/${provider}/models`).then(json),
+  setProviderKey: (provider, key) => fetch(`/api/providers/${provider}/key`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) }).then(json),
 };

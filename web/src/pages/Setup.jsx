@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useGuild } from '../GuildContext.jsx';
 import { Page, PageHead } from '../components/Page.jsx';
@@ -11,6 +11,13 @@ const SUMMARY_LANGS = [['match', 'Match transcription'], ...LANGS.filter(([c]) =
 
 const PROVIDER_DEFAULTS = {
   gemini: 'gemini-2.5-flash', openai: 'gpt-4o-mini', ollama: 'llama3', opencode: 'deepseek-v4-flash',
+};
+// Providers whose key is editable from the UI (Ollama is keyless/local).
+const KEYED = { gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', opencode: 'OPENCODE_API_KEY' };
+const KEY_HELP = {
+  gemini: 'aistudio.google.com/apikey',
+  openai: 'platform.openai.com/api-keys',
+  opencode: 'opencode.ai/zen',
 };
 
 function Field({ label, hint, children }) {
@@ -51,15 +58,87 @@ function Switch({ checked, onChange, label, desc }) {
   );
 }
 
+function Chevron() {
+  return <Icon.Chevron width={14} height={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-muted" />;
+}
+
+/* ── API key editor ───────────────────────────────────────────────────────
+   Shows a "set / not set" badge; lets the user paste a new key (saved to .env,
+   applied live) or clear it. The value is never read back from the server. */
+function KeyEditor({ provider, present, onChanged }) {
+  const envVar = KEYED[provider];
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [reveal, setReveal] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function save() {
+    setBusy(true); setErr(null);
+    try { await api.setProviderKey(provider, value.trim()); setValue(''); setEditing(false); onChanged?.(); }
+    catch (e) { setErr(e?.message || 'Failed to save key'); }
+    finally { setBusy(false); }
+  }
+  async function clear() {
+    if (!window.confirm(`Remove the ${provider} API key from .env?`)) return;
+    setBusy(true); setErr(null);
+    try { await api.setProviderKey(provider, ''); setValue(''); setEditing(false); onChanged?.(); }
+    catch (e) { setErr(e?.message || 'Failed to clear key'); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <Field label="API key" hint={err ? undefined : <>Stored in <code className="text-ink-2">.env</code> as <code className="text-ink-2">{envVar}</code> · get one at {KEY_HELP[provider]}</>}>
+      {!editing ? (
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 text-[13px] font-medium px-2.5 py-1.5 rounded-sm ${present ? 'text-accent bg-accent-soft' : 'text-warn bg-warn-soft'}`}>
+            <span style={{ width: 6, height: 6, borderRadius: 6, background: 'currentColor' }} />
+            {present ? 'Key set' : 'No key'}
+          </span>
+          <button onClick={() => setEditing(true)} className="btn btn-ghost !py-1.5">{present ? 'Replace' : 'Add key'}</button>
+          {present && <button onClick={clear} disabled={busy} className="btn btn-ghost !py-1.5 !text-error">Remove</button>}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              type={reveal ? 'text' : 'password'} value={value} autoFocus
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setEditing(false); setValue(''); } }}
+              placeholder={`Paste ${provider} API key…`} className="input !pr-10" />
+            <button type="button" onClick={() => setReveal((r) => !r)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink text-xs">{reveal ? 'Hide' : 'Show'}</button>
+          </div>
+          <button onClick={save} disabled={!value.trim() || busy} className="btn btn-primary !py-2">{busy ? 'Saving…' : 'Save'}</button>
+          <button onClick={() => { setEditing(false); setValue(''); }} disabled={busy} className="btn btn-ghost !py-2">Cancel</button>
+        </div>
+      )}
+      {err && <p className="text-xs text-error mt-1.5">{err}</p>}
+    </Field>
+  );
+}
+
 export default function Setup() {
   const { guildId } = useGuild();
   const [data, setData] = useState(null);
   const [msg, setMsg] = useState('');
   const [msgErr, setMsgErr] = useState(false);
   const [modelDraft, setModelDraft] = useState('');
+  const [models, setModels] = useState([]); // suggestions for current provider
+  const listId = useRef(`models-${Math.random().toString(36).slice(2)}`).current;
 
-  useEffect(() => { if (guildId) api.config(guildId).then(setData).catch(() => setData(null)); }, [guildId]);
+  function reload() { if (guildId) api.config(guildId).then(setData).catch(() => setData(null)); }
+  useEffect(() => { reload(); }, [guildId]);
   useEffect(() => { if (data?.config) setModelDraft(data.config.summarizerModel); }, [data?.config?.summarizerModel]);
+
+  // Fetch the live model list whenever the provider changes (incl. Ollama tags).
+  const provider = data?.config?.summarizerProvider;
+  useEffect(() => {
+    if (!provider) return;
+    let stale = false;
+    api.providerModels(provider).then((r) => { if (!stale) setModels(r.models || []); }).catch(() => { if (!stale) setModels([]); });
+    return () => { stale = true; };
+  }, [provider]);
 
   if (!guildId) return <Page><Empty icon={Icon.Settings} title="No server selected" /></Page>;
   if (!data) return (
@@ -69,7 +148,7 @@ export default function Setup() {
     </Page>
   );
 
-  const { config: c, providers, channels } = data;
+  const { config: c, providers, channels, secrets = {} } = data;
   const save = async (patch) => {
     try {
       const r = await api.saveConfig(guildId, patch);
@@ -79,6 +158,7 @@ export default function Setup() {
     setTimeout(() => setMsg(''), 2400);
   };
   const sel = 'input appearance-none pr-9 cursor-pointer';
+  const keyed = Object.prototype.hasOwnProperty.call(KEYED, c.summarizerProvider);
 
   return (
     <Page max="720px">
@@ -95,21 +175,37 @@ export default function Setup() {
               <select className={sel} value={c.summarizerProvider}
                 onChange={(e) => { const p = e.target.value; save({ provider: p, model: PROVIDER_DEFAULTS[p] || '' }); }}>
                 {providers.map((p) => (
-                  <option key={p.provider} value={p.provider} disabled={!p.ok}>
-                    {p.provider}{p.ok ? '' : ` (set ${p.missing} in .env)`}
+                  <option key={p.provider} value={p.provider}>
+                    {p.provider}{p.ok ? '' : ' (no key set)'}
                   </option>
                 ))}
               </select>
-              <Icon.Chevron width={14} height={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-muted" />
+              <Chevron />
             </div>
           </Field>
-          <Field label="Model" hint="The model id for the chosen provider.">
-            <input className="input" value={modelDraft} onChange={(e) => setModelDraft(e.target.value)}
+
+          {keyed && <KeyEditor provider={c.summarizerProvider} present={!!secrets[c.summarizerProvider]} onChanged={reload} />}
+
+          <Field label="Model" hint={models.length ? 'Pick a suggestion or type any model id the provider supports.' : 'Type the model id for the chosen provider.'}>
+            <input className="input" value={modelDraft} list={listId}
+              onChange={(e) => setModelDraft(e.target.value)}
               onBlur={(e) => {
                 const v = e.target.value.trim();
                 if (v && v !== c.summarizerModel) save({ provider: c.summarizerProvider, model: v });
                 else if (!v) setModelDraft(c.summarizerModel);
               }} />
+            <datalist id={listId}>
+              {models.map((m) => <option key={m} value={m} />)}
+            </datalist>
+            {models.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {models.slice(0, 6).map((m) => (
+                  <button key={m} type="button"
+                    onClick={() => { setModelDraft(m); if (m !== c.summarizerModel) save({ provider: c.summarizerProvider, model: m }); }}
+                    className={`chip hover:!bg-surface-2 transition-colors ${m === c.summarizerModel ? '!bg-primary-soft !text-ink' : ''}`}>{m}</button>
+                ))}
+              </div>
+            )}
           </Field>
         </Card>
 
@@ -119,7 +215,7 @@ export default function Setup() {
               <select className={sel} value={c.whisperModel} onChange={(e) => save({ whisperModel: e.target.value })}>
                 {WHISPER.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
-              <Icon.Chevron width={14} height={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-muted" />
+              <Chevron />
             </div>
           </Field>
           <Field label="Spoken language">
@@ -127,7 +223,7 @@ export default function Setup() {
               <select className={sel} value={c.language} onChange={(e) => save({ language: e.target.value })}>
                 {LANGS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
               </select>
-              <Icon.Chevron width={14} height={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-muted" />
+              <Chevron />
             </div>
           </Field>
         </Card>
@@ -139,7 +235,7 @@ export default function Setup() {
                 <option value="">(meeting's own channel)</option>
                 {channels.map((ch) => <option key={ch.id} value={ch.id}>#{ch.name}</option>)}
               </select>
-              <Icon.Chevron width={14} height={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-muted" />
+              <Chevron />
             </div>
           </Field>
           <Field label="Summary language">
@@ -147,7 +243,7 @@ export default function Setup() {
               <select className={sel} value={c.summaryLanguage} onChange={(e) => save({ summary_language: e.target.value })}>
                 {SUMMARY_LANGS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
               </select>
-              <Icon.Chevron width={14} height={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-muted" />
+              <Chevron />
             </div>
           </Field>
           <Switch checked={c.useThread} onChange={(e) => save({ useThread: e.target.checked })}

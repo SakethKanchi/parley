@@ -24,4 +24,7 @@ export const api = {
   saveConfig: (g, patch) => fetch(`/api/guilds/${g}/config`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }).then(json),
   providerModels: (provider) => fetch(`/api/providers/${provider}/models`).then(json),
   setProviderKey: (provider, key) => fetch(`/api/providers/${provider}/key`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) }).then(json),
+  systemStatus: () => fetch('/api/system/status').then(json),
+  setConnection: (patch) => fetch('/api/system/connection', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }).then(json),
+  botAction: (action) => fetch(`/api/system/bot/${action}`, { method: 'POST' }).then(json),
 };

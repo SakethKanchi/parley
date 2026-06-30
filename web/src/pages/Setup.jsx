@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useGuild } from '../GuildContext.jsx';
+import { useSystem } from '../SystemContext.jsx';
 import { Page, PageHead } from '../components/Page.jsx';
 import { Icon, Empty } from '../components/ui.jsx';
+import { ConnectionForm, BotStatusBadge } from '../components/Connection.jsx';
 
 const WHISPER = ['tiny', 'base', 'small', 'medium', 'large-v3', 'large-v3-turbo'];
 const LANGS = [['auto', 'Auto-detect'], ['en', 'English'], ['de', 'German'], ['es', 'Spanish'], ['fr', 'French'],
@@ -118,8 +120,54 @@ function KeyEditor({ provider, present, onChanged }) {
   );
 }
 
+/* ── Connection card (server-wide Discord + STT settings) ────────────────── */
+function ConnectionCard({ sys, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const bot = sys?.bot;
+  const conn = sys?.connection;
+  if (!sys?.managed) {
+    return (
+      <Card title="Connection" desc="Discord bot connection.">
+        <p className="text-sm text-muted">
+          This dashboard is running in read-only mode (no bot process attached), so the Discord
+          connection is managed elsewhere. Start Parley with <code className="text-ink-2">npm start</code> to
+          edit it here.
+        </p>
+        {bot && <div className="mt-2"><BotStatusBadge bot={bot} /></div>}
+      </Card>
+    );
+  }
+  async function restart() {
+    setRestarting(true);
+    try { await api.botAction('restart'); await onChanged?.(); }
+    finally { setRestarting(false); }
+  }
+  return (
+    <Card title="Connection" desc="Your Discord bot. Changes reconnect instantly.">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {bot && <BotStatusBadge bot={bot} />}
+          {bot?.guildCount > 0 && <span className="text-xs text-muted">{bot.guildCount} server{bot.guildCount === 1 ? '' : 's'}</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={restart} disabled={restarting} className="btn btn-ghost !py-1.5">{restarting ? 'Reconnecting…' : 'Reconnect'}</button>
+          <button onClick={() => setOpen((o) => !o)} className="btn btn-ghost !py-1.5">{open ? 'Close' : 'Edit credentials'}</button>
+        </div>
+      </div>
+      {bot?.state === 'error' && bot?.error && <p className="text-xs text-error mt-2">{bot.error}</p>}
+      {open && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <ConnectionForm conn={conn} submitLabel="Save & reconnect" onSaved={async () => { setOpen(false); await onChanged?.(); }} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function Setup() {
   const { guildId } = useGuild();
+  const { status: sys, refresh: refreshSys } = useSystem();
   const [data, setData] = useState(null);
   const [msg, setMsg] = useState('');
   const [msgErr, setMsgErr] = useState(false);
@@ -140,7 +188,13 @@ export default function Setup() {
     return () => { stale = true; };
   }, [provider]);
 
-  if (!guildId) return <Page><Empty icon={Icon.Settings} title="No server selected" /></Page>;
+  if (!guildId) return (
+    <Page max="720px">
+      <PageHead title="Settings" subtitle="Discord connection and per-server configuration." />
+      <ConnectionCard sys={sys} onChanged={refreshSys} />
+      <div className="mt-5"><Empty icon={Icon.Settings} title="No server selected" body="Pick a server from the top bar to configure summarizer, transcription, and delivery." /></div>
+    </Page>
+  );
   if (!data) return (
     <Page max="720px">
       <div className="h-8 w-32 skeleton mb-7" />
@@ -169,6 +223,7 @@ export default function Setup() {
       />
 
       <div className="space-y-5">
+        <ConnectionCard sys={sys} onChanged={refreshSys} />
         <Card title="Summarizer" desc="Which AI turns transcripts into structured notes.">
           <Field label="Provider">
             <div className="relative">

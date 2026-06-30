@@ -1,7 +1,12 @@
 import { SlashCommandBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
 import { SUPPORTED_PROVIDERS } from '../adapters/summarizer/index.js';
 import { WHISPER_MODELS } from './setup-logic.js';
+import { STT_PROVIDERS, STT_MODELS } from '../adapters/stt/index.js';
 import { LANGUAGES } from '../adapters/summarizer/languages.js';
+
+// Discord caps a string option at 25 choices; the cloud STT model ids comfortably
+// fit. Flatten every provider's models into one choice list for `stt_model`.
+const STT_MODEL_CHOICES = [...new Set(Object.values(STT_MODELS).flat())];
 
 export function buildCommands() {
   return [
@@ -22,7 +27,11 @@ export function buildCommands() {
       .addStringOption((o) => o.setName('provider').setDescription('Summarizer provider')
         .addChoices(...SUPPORTED_PROVIDERS.map((p) => ({ name: p, value: p }))))
       .addStringOption((o) => o.setName('model').setDescription('Summarizer model name'))
-      .addStringOption((o) => o.setName('whisper_model').setDescription('Whisper model size')
+      .addStringOption((o) => o.setName('stt_provider').setDescription('Speech-to-text provider')
+        .addChoices(...STT_PROVIDERS.map((p) => ({ name: p, value: p }))))
+      .addStringOption((o) => o.setName('stt_model').setDescription('Cloud STT model (Groq/OpenAI)')
+        .addChoices(...STT_MODEL_CHOICES.map((m) => ({ name: m, value: m }))))
+      .addStringOption((o) => o.setName('whisper_model').setDescription('Whisper model size (local sidecar)')
         .addChoices(...WHISPER_MODELS.map((m) => ({ name: m, value: m }))))
       .addChannelOption((o) => o.setName('notes_channel').setDescription('Where to post notes').addChannelTypes(ChannelType.GuildText))
       .addBooleanOption((o) => o.setName('thread').setDescription('Post notes in a thread'))
@@ -65,7 +74,7 @@ export const COMMAND_CATALOG = [
   { name: 'search', category: 'Notes', admin: false, args: '<keyword>',
     summary: 'Full-text search across every past meeting transcript.' },
   { name: 'setup', category: 'Configuration', admin: true,
-    args: '[provider] [model] [whisper_model] [notes_channel] [thread] [autojoin] [language] [summary_language]',
+    args: '[provider] [model] [stt_provider] [stt_model] [whisper_model] [notes_channel] [thread] [autojoin] [language] [summary_language]',
     summary: 'Configure the bot for this server (admin only).',
-    detail: 'Set the summarizer provider/model, whisper size, notes channel, threading, auto-join, and languages. You can also do all of this from this dashboard under Settings.' },
+    detail: 'Set the summarizer provider/model, the speech-to-text provider (local sidecar, Groq, or OpenAI) and model, notes channel, threading, auto-join, and languages. You can also do all of this from this dashboard under Settings.' },
 ];

@@ -15,11 +15,19 @@ const PROVIDER_DEFAULTS = {
   gemini: 'gemini-2.5-flash', openai: 'gpt-4o-mini', ollama: 'llama3', opencode: 'deepseek-v4-flash',
 };
 // Providers whose key is editable from the UI (Ollama is keyless/local).
-const KEYED = { gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', opencode: 'OPENCODE_API_KEY' };
+const KEYED = { gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', opencode: 'OPENCODE_API_KEY', groq: 'GROQ_API_KEY' };
 const KEY_HELP = {
   gemini: 'aistudio.google.com/apikey',
   openai: 'platform.openai.com/api-keys',
   opencode: 'opencode.ai/zen',
+  groq: 'console.groq.com/keys',
+};
+// Which env secret each STT provider needs (sidecar is keyless/local).
+const STT_KEY = { groq: 'groq', openai: 'openai' };
+const STT_HELP = {
+  sidecar: 'Runs the local faster-whisper container. Free and fully offline, but uses your CPU.',
+  groq: 'Groq-hosted Whisper. Extremely fast and cheap (free tier). Skips running the local sidecar.',
+  openai: 'OpenAI (or any OpenAI-compatible) transcription endpoint.',
 };
 
 function Field({ label, hint, children }) {
@@ -202,7 +210,7 @@ export default function Setup() {
     </Page>
   );
 
-  const { config: c, providers, channels, secrets = {} } = data;
+  const { config: c, providers, sttProviders, channels, secrets = {} } = data;
   const save = async (patch) => {
     try {
       const r = await api.saveConfig(guildId, patch);
@@ -213,6 +221,9 @@ export default function Setup() {
   };
   const sel = 'input appearance-none pr-9 cursor-pointer';
   const keyed = Object.prototype.hasOwnProperty.call(KEYED, c.summarizerProvider);
+  // Cloud STT providers (groq/openai) expose an editable key + a model list.
+  const sttKeyed = Object.prototype.hasOwnProperty.call(STT_KEY, c.sttProvider);
+  const sttModels = (sttProviders || []).find((p) => p.provider === c.sttProvider)?.models || [];
 
   return (
     <Page max="720px">
@@ -264,15 +275,50 @@ export default function Setup() {
           </Field>
         </Card>
 
-        <Card title="Transcription" desc="Local faster-whisper speech-to-text.">
-          <Field label="Whisper model" hint="Larger is more accurate but slower.">
+        <Card title="Transcription" desc="How spoken audio becomes text.">
+          <Field label="Provider" hint={STT_HELP[c.sttProvider] || ''}>
             <div className="relative">
-              <select className={sel} value={c.whisperModel} onChange={(e) => save({ whisperModel: e.target.value })}>
-                {WHISPER.map((m) => <option key={m} value={m}>{m}</option>)}
+              <select className={sel} value={c.sttProvider}
+                onChange={(e) => {
+                  const p = e.target.value;
+                  // Reset the cloud model to the provider's default when switching.
+                  const sp = (sttProviders || []).find((x) => x.provider === p);
+                  save({ sttProvider: p, sttModel: p === 'sidecar' ? null : (sp?.models?.[0] ?? null) });
+                }}>
+                {(sttProviders || []).map((p) => (
+                  <option key={p.provider} value={p.provider}>
+                    {p.label || p.provider}{p.ok ? '' : ' (no key set)'}
+                  </option>
+                ))}
               </select>
               <Chevron />
             </div>
           </Field>
+
+          {sttKeyed && (
+            <KeyEditor provider={STT_KEY[c.sttProvider]} present={!!secrets[STT_KEY[c.sttProvider]]} onChanged={() => { reload(); refreshSys?.(); }} />
+          )}
+
+          {c.sttProvider === 'sidecar' ? (
+            <Field label="Whisper model" hint="Larger is more accurate but slower on CPU.">
+              <div className="relative">
+                <select className={sel} value={c.whisperModel} onChange={(e) => save({ whisperModel: e.target.value })}>
+                  {WHISPER.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <Chevron />
+              </div>
+            </Field>
+          ) : (
+            <Field label="Model" hint="Cloud transcription model.">
+              <div className="relative">
+                <select className={sel} value={c.sttModel || (sttModels[0] ?? '')} onChange={(e) => save({ sttModel: e.target.value })}>
+                  {sttModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <Chevron />
+              </div>
+            </Field>
+          )}
+
           <Field label="Spoken language">
             <div className="relative">
               <select className={sel} value={c.language} onChange={(e) => save({ language: e.target.value })}>

@@ -14,6 +14,7 @@ import { MODEL_SUGGESTIONS, fetchOllamaModels } from '../adapters/summarizer/mod
 import { secretStatus, setProviderKey, isSecretProvider, connectionStatus, setConnection } from '../store/secrets.js';
 import { COMMAND_CATALOG } from '../commands/definitions.js';
 import { retryMeeting, retryPlan, RETRYABLE_STATUSES } from '../pipeline/retry.js';
+import { availableSttProviders } from '../adapters/stt/index.js';
 
 function audioDir(id) {
   return join(env.dataDir, 'audio', String(id));
@@ -173,6 +174,7 @@ export function apiRouter({ db, bot = null, client = null }) {
     res.json({
       config: getGuildConfig(db, req.params.g),
       providers: availableProviders(env),
+      sttProviders: availableSttProviders(env),
       channels,
       models: MODEL_SUGGESTIONS,
       secrets: secretStatus(env),
@@ -227,6 +229,7 @@ export function apiRouter({ db, bot = null, client = null }) {
     res.json({
       connection: connectionStatus(env),
       providers: availableProviders(env),
+      sttProviders: availableSttProviders(env),
       secrets: secretStatus(env),
       bot: bot
         ? bot.status()

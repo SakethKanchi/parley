@@ -1,6 +1,8 @@
 export const DEFAULTS = {
   summarizerProvider: 'gemini',
   summarizerModel: 'gemini-2.5-flash',
+  sttProvider: 'sidecar',
+  sttModel: null,
   whisperModel: 'small',
   notesChannelId: null,
   useThread: true,
@@ -12,6 +14,8 @@ export const DEFAULTS = {
 const COLS = {
   summarizerProvider: 'summarizer_provider',
   summarizerModel: 'summarizer_model',
+  sttProvider: 'stt_provider',
+  sttModel: 'stt_model',
   whisperModel: 'whisper_model',
   notesChannelId: 'notes_channel_id',
   useThread: 'use_thread',
@@ -24,6 +28,8 @@ function fromRow(row) {
   return {
     summarizerProvider: row.summarizer_provider ?? DEFAULTS.summarizerProvider,
     summarizerModel: row.summarizer_model ?? DEFAULTS.summarizerModel,
+    sttProvider: row.stt_provider ?? DEFAULTS.sttProvider,
+    sttModel: row.stt_model ?? DEFAULTS.sttModel,
     whisperModel: row.whisper_model ?? DEFAULTS.whisperModel,
     notesChannelId: row.notes_channel_id ?? DEFAULTS.notesChannelId,
     useThread: row.use_thread == null ? DEFAULTS.useThread : !!row.use_thread,
@@ -46,12 +52,14 @@ export function setGuildConfig(db, guildId, patch) {
   const merged = { ...current, ...safePatch, guildId };
   db.sql.prepare(
     `INSERT OR REPLACE INTO guild_config
-       (guild_id, summarizer_provider, summarizer_model, whisper_model, notes_channel_id, use_thread, auto_join, language, summary_language)
-     VALUES (@guildId, @summarizerProvider, @summarizerModel, @whisperModel, @notesChannelId, @useThread, @autoJoin, @language, @summaryLanguage)`
+       (guild_id, summarizer_provider, summarizer_model, stt_provider, stt_model, whisper_model, notes_channel_id, use_thread, auto_join, language, summary_language)
+     VALUES (@guildId, @summarizerProvider, @summarizerModel, @sttProvider, @sttModel, @whisperModel, @notesChannelId, @useThread, @autoJoin, @language, @summaryLanguage)`
   ).run({
     guildId,
     summarizerProvider: merged.summarizerProvider,
     summarizerModel: merged.summarizerModel,
+    sttProvider: merged.sttProvider,
+    sttModel: merged.sttModel,
     whisperModel: merged.whisperModel,
     notesChannelId: merged.notesChannelId,
     useThread: merged.useThread ? 1 : 0,

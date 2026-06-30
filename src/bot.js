@@ -283,6 +283,8 @@ export function startBot({ db, audioRoot }) {
         const input = {
           provider: interaction.options.getString('provider') ?? undefined,
           model: interaction.options.getString('model') ?? undefined,
+          sttProvider: interaction.options.getString('stt_provider') ?? undefined,
+          sttModel: interaction.options.getString('stt_model') ?? undefined,
           whisperModel: interaction.options.getString('whisper_model') ?? undefined,
           notesChannelId: interaction.options.getChannel('notes_channel')?.id,
           useThread: interaction.options.getBoolean('thread') ?? undefined,

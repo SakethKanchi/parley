@@ -17,10 +17,13 @@ import { existsSync } from 'node:fs';
 import { config, resolveEnvFile } from '../config/env.js';
 
 // provider -> { env: ENV_VAR_NAME, apply(config, value) }
+// Covers both summarizer keys (gemini/openai/opencode) and the cloud STT key
+// (groq). openai's key is shared by its summarizer and its STT provider.
 const PROVIDER_SECRETS = {
   gemini: { env: 'GEMINI_API_KEY', apply: (c, v) => { c.gemini.apiKey = v; } },
   openai: { env: 'OPENAI_API_KEY', apply: (c, v) => { c.openai.apiKey = v; } },
   opencode: { env: 'OPENCODE_API_KEY', apply: (c, v) => { c.opencode.apiKey = v; } },
+  groq: { env: 'GROQ_API_KEY', apply: (c, v) => { c.groq.apiKey = v; } },
 };
 
 // Core connection settings. `secret: true` means the value is never returned to
@@ -41,6 +44,7 @@ export function secretStatus(env = config) {
     gemini: !!env.gemini.apiKey,
     openai: !!env.openai.apiKey,
     opencode: !!env.opencode.apiKey,
+    groq: !!env.groq?.apiKey,
   };
 }
 

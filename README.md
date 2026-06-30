@@ -70,7 +70,7 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 - **Structured AI notes.** TL;DR, topic sections, decisions, open questions, and **action items grouped by the person responsible**, plus per-speaker talk-time stats.
 - **Full web dashboard.** A local control panel to browse meetings, read notes, work the action-item list, see talk-time analytics, search transcripts, and configure everything. Connect your Discord bot and edit settings right from the browser — no editing files.
 - **Pluggable summarizer.** Google Gemini (default, free tier), any OpenAI-compatible endpoint, or fully-offline Ollama — switch per-server with `/setup`, no restart.
-- **Local speech-to-text.** A warm [faster-whisper](https://github.com/SYSTRAN/faster-whisper) sidecar; pick model size from `tiny` to `large-v3-turbo`.
+- **Local or cloud speech-to-text.** Run a warm [faster-whisper](https://github.com/SYSTRAN/faster-whisper) sidecar (fully offline, free), or point transcription at a cloud Whisper API like [Groq](https://console.groq.com/docs/speech-to-text) (extremely fast, ~$0.04/hr, free tier) or OpenAI. Switch per-server in Settings, no sidecar required.
 - **Self-host in one command.** `docker compose up -d` runs the bot, the whisper sidecar, and the dashboard together. No public IP or port forwarding needed.
 - **Searchable history.** `/history`, `/summary`, `/raw`, and full-text `/search` over every past meeting, backed by SQLite FTS5.
 - **Resilient.** Failed transcriptions or summaries are retryable with one click from the dashboard (or the CLI).
@@ -265,9 +265,11 @@ pm2 save
 
 | Option | Description |
 |--------|-------------|
-| `provider` | Summarizer: `gemini` (default), `openai`, `ollama` |
+| `provider` | Summarizer: `gemini` (default), `openai`, `ollama`, `opencode` |
 | `model` | Model name for the chosen provider |
-| `whisper_model` | faster-whisper size: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo` |
+| `stt_provider` | Speech-to-text backend: `sidecar` (local faster-whisper, default), `groq`, `openai` |
+| `stt_model` | Cloud STT model when using `groq`/`openai` (e.g. `whisper-large-v3-turbo`) |
+| `whisper_model` | Local sidecar size: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo` |
 | `notes_channel` | Text channel where notes are posted (defaults to the meeting's channel) |
 | `thread` | Post notes in a thread (default: on) |
 | `autojoin` | Auto-join when 2+ people are in voice |
@@ -285,10 +287,22 @@ pm2 save
 
 All providers return the same structured-notes shape, so output is consistent regardless of which you pick.
 
+## 🎙️ Supported transcription
+
+Speech-to-text is pluggable per server. The default needs no API key; the cloud options need no Python sidecar.
+
+- **sidecar** *(default)* — local [faster-whisper](https://github.com/SYSTRAN/faster-whisper) running in its own container. Fully offline and free; transcription runs on your CPU. Pick a model size from `tiny` to `large-v3-turbo`.
+- **groq** — Groq-hosted Whisper. Extremely fast (~200x realtime) and cheap (`whisper-large-v3-turbo` is about **$0.04/hr** transcribed, with a free tier). Set `GROQ_API_KEY` (get one at [console.groq.com/keys](https://console.groq.com/keys)). Lets you skip running the sidecar entirely.
+- **openai** — OpenAI or any OpenAI-compatible `/audio/transcriptions` endpoint. Set `OPENAI_API_KEY` (and `OPENAI_BASE_URL`).
+
+Every backend returns the same `{ text, words }` shape with word-level timestamps, so per-speaker attribution and talk-time stats work the same way regardless of provider. Switch in **Settings → Transcription** or with `/setup stt_provider:…`.
+
+> Want to try it before wiring up a meeting? `node scripts/try-stt.mjs --provider groq` transcribes a recorded `.pcm` track (or any `--file`) and prints the text + timing.
+
 ## 🔒 Privacy & consent
 
 - The bot shows `[REC]` in its nickname whenever a recording is active, so every member can see it.
-- Audio is transcribed **on the machine running the bot**. No audio is uploaded anywhere; only the final transcript text is sent to your chosen summarizer (and nothing leaves your network at all with Ollama).
+- With the default local sidecar, audio is transcribed **on the machine running the bot** — no audio leaves your network, and with Ollama as the summarizer nothing does at all. If you choose a **cloud** transcription provider (Groq/OpenAI), meeting audio is sent to that provider for transcription; only the final transcript text is sent to your chosen summarizer.
 - Recording people's voices is subject to consent laws that vary by jurisdiction (some require all-party consent). **You are responsible for obtaining consent from all participants.**
 
 ## Web dashboard (local)

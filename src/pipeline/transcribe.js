@@ -1,10 +1,14 @@
 import { convertPcmToWav } from '../voice/audio.js';
-import { transcribeFile } from '../adapters/stt-client.js';
+import { getSTT, resolveSttModel } from '../adapters/stt/index.js';
 import { unlink } from 'node:fs/promises';
 
 export async function transcribeTracks(tracks, cfg = {}, deps = {}) {
   const convert = deps.convert || convertPcmToWav;
-  const stt = deps.stt || ((wav) => transcribeFile(wav, { model: cfg.whisperModel, language: cfg.language }));
+  // Resolve the configured STT provider (sidecar | groq | openai) once per
+  // meeting. The provider default can be overridden via deps.stt in tests.
+  const transcribe = getSTT(cfg, deps.env, deps.sttDeps);
+  const model = resolveSttModel(cfg);
+  const stt = deps.stt || ((wav) => transcribe(wav, { model, language: cfg.language }));
   const cleanup = deps.cleanup || (async (p) => { try { await unlink(p); } catch { /* ignore */ } });
 
   const utterances = [];

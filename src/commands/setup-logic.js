@@ -1,5 +1,6 @@
 import { SUPPORTED_PROVIDERS } from '../adapters/summarizer/index.js';
 import { LANGUAGE_CODES, SUMMARY_LANGUAGE_VALUES } from '../adapters/summarizer/languages.js';
+import { STT_PROVIDERS, STT_MODELS, sttProviderReady } from '../adapters/stt/index.js';
 
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large-v3', 'large-v3-turbo'];
 
@@ -29,6 +30,31 @@ export function validateSetup(input, env) {
       return { ok: false, error: `Invalid whisper model. Use one of: ${WHISPER_MODELS.join(', ')}.` };
     }
     patch.whisperModel = input.whisperModel;
+  }
+
+  // Speech-to-text provider (sidecar | groq | openai). Selecting a cloud
+  // provider requires its API key to be set, mirroring the summarizer checks.
+  if (input.sttProvider !== undefined) {
+    if (!STT_PROVIDERS.includes(input.sttProvider)) {
+      return { ok: false, error: `Unknown STT provider "${input.sttProvider}". Use one of: ${STT_PROVIDERS.join(', ')}.` };
+    }
+    const ready = sttProviderReady(input.sttProvider, env);
+    if (!ready.ok) return { ok: false, error: `Cannot use ${input.sttProvider} STT: ${ready.missing} is not set in .env.` };
+    patch.sttProvider = input.sttProvider;
+    // A model supplied alongside the provider must belong to that provider.
+    if (input.sttModel !== undefined && input.sttModel !== null && input.sttProvider !== 'sidecar') {
+      if (!STT_MODELS[input.sttProvider].includes(input.sttModel)) {
+        return { ok: false, error: `Invalid ${input.sttProvider} model. Use one of: ${STT_MODELS[input.sttProvider].join(', ')}.` };
+      }
+      patch.sttModel = input.sttModel;
+    }
+  } else if (input.sttModel !== undefined && input.sttModel !== null) {
+    // Model changed without naming a provider: validate against the current one.
+    const provider = env.sttProvider || (typeof input.currentSttProvider === 'string' ? input.currentSttProvider : 'sidecar');
+    if (provider !== 'sidecar' && !STT_MODELS[provider]?.includes(input.sttModel)) {
+      return { ok: false, error: `Invalid ${provider} model. Use one of: ${(STT_MODELS[provider] || []).join(', ')}.` };
+    }
+    patch.sttModel = input.sttModel;
   }
 
   if (input.notesChannelId !== undefined) patch.notesChannelId = input.notesChannelId;

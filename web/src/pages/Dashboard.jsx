@@ -97,7 +97,7 @@ export default function Dashboard() {
         <div className="lg:col-span-2 space-y-6">
           <div className="card p-5">
             <SectionHead title="Activity" action={<span className="text-xs text-muted">last 30 days</span>} />
-            <Sparkline data={timeline} height={70} />
+            <Sparkline data={timeline} height={96} />
           </div>
 
           <div>

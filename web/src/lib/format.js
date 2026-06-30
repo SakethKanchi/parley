@@ -1,8 +1,14 @@
 // Shared formatting + small pure helpers used across the dashboard.
 
-/** Parse SQLite/ISO/unix-ms into a Date, or null. */
+/** Parse SQLite/ISO/unix-ms into a Date, or null.
+ *  A bare calendar date ("YYYY-MM-DD") is parsed in LOCAL time, not UTC, so a
+ *  chart/day key never shifts a day backward in timezones behind UTC. */
 export function toDate(raw) {
   if (raw == null || raw === '') return null;
+  if (typeof raw === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
   const d = new Date(typeof raw === 'string' ? raw.replace(' ', 'T') : raw);
   return Number.isNaN(d.getTime()) ? null : d;
 }

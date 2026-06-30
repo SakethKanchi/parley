@@ -4,7 +4,7 @@ import { useGuild } from '../GuildContext.jsx';
 import { Page, PageHead, SectionHead } from '../components/Page.jsx';
 import { BarChart, RankBars, Donut } from '../components/charts.jsx';
 import { Avatar, Icon, Empty } from '../components/ui.jsx';
-import { fmtHours, fmtMs, fmtCompact, colorOf, fmtDateShort } from '../lib/format.js';
+import { fmtHours, fmtMs, fmtCompact, colorOf } from '../lib/format.js';
 
 function StatTile({ label, value, sub }) {
   return (
@@ -68,11 +68,7 @@ export default function Analytics() {
 
       <div className="card p-5 mb-6">
         <SectionHead title="Meetings per day" action={<span className="text-xs text-muted">last 30 days</span>} />
-        <BarChart data={timeline} height={170} />
-        <div className="flex justify-between text-[10px] text-faint mt-2">
-          <span>{fmtDateShort(timeline[0]?.date)}</span>
-          <span>{fmtDateShort(timeline[timeline.length - 1]?.date)}</span>
-        </div>
+        <BarChart data={timeline} height={190} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">

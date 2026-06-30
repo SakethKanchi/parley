@@ -1,0 +1,28 @@
+# Keep the build context small and never ship secrets or local data.
+.git
+.github
+node_modules
+web/node_modules
+web/dist
+stt_sidecar/.venv
+stt_sidecar/__pycache__
+stt_sidecar/.pytest_cache
+
+# Secrets & local data
+.env
+.env.*.local
+*.db
+*.db-shm
+*.db-wal
+data/
+audio/
+
+# Big local-only assets / media
+assets/parley-demo.mp4
+
+# Docs & dev cruft
+docs/
+.superpowers/
+*.log
+.DS_Store
+test/

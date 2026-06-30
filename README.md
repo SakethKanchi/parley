@@ -50,6 +50,8 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 - [Demo](#-demo)
 - [Features](#-features)
 - [How it works](#-how-it-works)
+- [Quick start (Docker)](#-quick-start-docker)
+- [Where to host it](#-where-to-host-it)
 - [Prerequisites](#-prerequisites)
 - [Installation](#-installation)
 - [Running](#-running)
@@ -94,6 +96,56 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 2. When the meeting ends, the orchestrator transcribes every track through the local sidecar, merges utterances into one timestamp-ordered, speaker-labeled transcript, and stores it in SQLite.
 3. The transcript goes to your chosen summarizer, and the structured notes are posted to a Discord thread. Audio is deleted after successful delivery.
 
+## 🐳 Quick start (Docker)
+
+The fastest way to self-host. You need [Docker](https://docs.docker.com/get-docker/) (Compose v2) and a Discord bot token. Everything else — Node, Python, ffmpeg, the whisper model — is handled for you.
+
+```bash
+git clone https://github.com/SakethKanchi/parley.git
+cd parley
+cp .env.example .env          # you can leave it empty and configure in the browser
+docker compose up -d --build
+```
+
+Then open **<http://127.0.0.1:3000>** and follow the first-run wizard:
+
+1. Paste your **Discord bot token** and **Application (client) ID** (the dashboard links you to the right pages).
+2. Parley connects instantly and registers its slash commands — no restart, no editing files.
+3. Add your summarizer key (Gemini's free tier works great) on the Settings page, or pick **Ollama** for a fully offline setup.
+
+That's it. The bot, the local whisper sidecar, and the dashboard all run as containers and restart with your machine. Your data (SQLite db + credentials) lives in a Docker volume and survives upgrades.
+
+```mermaid
+flowchart LR
+  D[Discord voice] -->|per-speaker audio| BOT[bot + web UI<br/>container]
+  BOT -->|HTTP localhost net| STT[whisper sidecar<br/>container]
+  BOT --> V[(parley-data<br/>volume)]
+  STT --> M[(whisper-models<br/>volume)]
+  YOU[you] -->|127.0.0.1:3000| BOT
+```
+
+> **Updating:** `git pull && docker compose up -d --build`. Your volume keeps every meeting and your settings.
+
+## 🌍 Where to host it
+
+Parley's bot connects **out** to Discord over a websocket, so it needs **no public IP, no open ports, and no port forwarding**. That makes it happy almost anywhere that stays on:
+
+| Option | Good for | Notes |
+|--------|----------|-------|
+| **Mini PC / NUC / old laptop** | Most people | Cheapest long-term. Leave it on, `docker compose up -d`, done. |
+| **Raspberry Pi 4/5 (4 GB+)** | Low-power home use | Works great with the `tiny`–`small` whisper models; larger models are slow on a Pi. |
+| **Home server / NAS** (Synology, Unraid, Proxmox) | Already-on hardware | Run the Compose stack as a normal container app. |
+| **A small VPS** (Hetzner, Fly, DigitalOcean, etc.) | No always-on box at home | A 2 vCPU / 4 GB instance handles `small`/`medium` fine. Pick one near your Discord voice region. |
+
+**Sizing the transcription:** whisper runs on CPU by default. `tiny`/`base` are realtime-ish anywhere; `small` is the sweet spot on a 4-core box; `medium`/`large-v3` want a beefier CPU (or a GPU build). You can change the model per-server in Settings without redeploying.
+
+**Two ways to point at the summarizer:**
+
+- **Cloud LLM (default):** only the final transcript *text* is sent to Gemini/OpenAI. Easiest, cheapest, great quality.
+- **Fully offline:** run [Ollama](https://ollama.com) (on the host or another box) and select it in Settings. Nothing ever leaves your network.
+
+> **Security:** the dashboard has **no authentication** and is bound to `127.0.0.1` (and, in Docker, published only to the host's localhost). To reach it from another machine, tunnel over SSH (`ssh -L 3000:127.0.0.1:3000 user@host`) or put it behind a reverse proxy **with auth** (e.g. Caddy + basic auth, Authelia, or a Tailscale/Cloudflare Tunnel). Do **not** expose port 3000 to the internet directly.
+
 ## 📦 Prerequisites
 
 - **Node.js >= 22.5** — uses the built-in `node:sqlite` module (no native database build).
@@ -103,6 +155,8 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 - An **API key for at least one summarizer** — Gemini is the default and has a free tier; or run Ollama locally for zero cloud dependency.
 
 ## 🚀 Installation
+
+> Prefer containers? Skip this and use the [Docker quick start](#-quick-start-docker) above — it bundles Node, Python, ffmpeg, and the sidecar, and you configure Discord from the browser. The steps below are for running Parley directly on the host (development, or if you don't want Docker).
 
 ### 1. Clone and install Node dependencies
 
@@ -148,6 +202,8 @@ DATA_DIR=
 ```
 
 > **Keys live in `.env` only.** `/setup` never accepts an API key — Discord retains message content, so a key typed into chat is a leak.
+>
+> **Or skip this file.** You can leave `.env` empty and set the Discord token, client ID, summarizer keys, and STT URL from the **web dashboard's first-run wizard** instead (see [Web dashboard](#web-dashboard-local)). Whatever you save there is written back to `.env` for you.
 
 ### 4. Invite the bot
 
@@ -182,6 +238,8 @@ pm2 start "npm run sidecar" --name meeting-sidecar
 pm2 start "npm start"       --name meeting-bot
 pm2 save
 ```
+
+> For most self-hosters, the [Docker quick start](#-quick-start-docker) is simpler and more robust than pm2 — it supervises both processes and restarts them with the host.
 
 ## 💬 Commands
 
@@ -234,18 +292,29 @@ All providers return the same structured-notes shape, so output is consistent re
 
 Parley ships a full local web dashboard for browsing meetings, reading AI
 notes, working the action-item list, searching transcripts, viewing talk-time
-analytics, and editing per-guild config.
-
-Build the UI once, then start the bot with it enabled:
+analytics, **connecting your Discord bot**, and editing per-guild config. With
+Docker it's already running; otherwise build it once and start the bot with it
+enabled:
 
     npm run web:build
     WEB_UI=1 npm start
 
-Open http://127.0.0.1:3000. The dashboard has a Dashboard overview, a Meetings
-browser (grid/list), per-meeting reading view with collapsible transcript and an
+Open <http://127.0.0.1:3000>.
+
+**First-run wizard.** If no Discord credentials are set yet, the dashboard opens
+on an onboarding screen instead of crashing: paste your bot token + Application
+ID (and optionally the STT URL) and Parley connects and registers its slash
+commands live, no restart. You can edit the connection any time from
+**Settings → Connection**, which also shows the bot's live status and a
+Reconnect button. Anything you save is written to `.env` (under `DATA_DIR`, so it
+persists across container restarts).
+
+The rest of the dashboard has a Dashboard overview, a Meetings browser
+(grid/list), a per-meeting reading view with collapsible transcript and an
 "Ask this meeting" box, an Action items board filterable by person, an Analytics
 page (meetings-per-day, talk-time and word leaderboards), full-text Search, and
-Settings.
+Settings (summarizer provider/model picker, in-app API-key editing, whisper
+model, languages, delivery).
 
 **Develop the UI without the bot.** `npm run web` serves the API + built UI
 against your existing `meetings.db` with no Discord token required, so you can
@@ -260,7 +329,8 @@ another.
 
 **Security:** the UI binds to 127.0.0.1 only and has NO authentication. Do not
 port-forward or reverse-proxy it to the internet without adding auth first. It
-never accepts or displays API keys — those stay in `.env`.
+never returns API keys or the Discord token to the browser — those stay in
+`.env` and only their "is it set?" status is shown.
 
 ## 🛠️ Development
 
@@ -275,15 +345,21 @@ npm run make:art                                                # regenerate the
 
 ```
 src/
-  index.js                   # entrypoint: events, wiring, boot recovery
-  config/env.js              # env + DATA_DIR (single source of truth)
+  index.js                   # entrypoint: starts web UI, lazy-starts the bot
+  bot.js                     # all Discord wiring (startBot)
+  bot-controller.js          # bot lifecycle: start/stop/restart/status
+  config/env.js              # env + DATA_DIR + persistent .env (single source of truth)
   voice/                     # capture, meeting-manager, audio, decisions
   pipeline/                  # transcribe, summarize, orchestrator
   adapters/                  # stt-client + summarizer/{gemini,ollama,openai,fake}
-  store/                     # db (node:sqlite + FTS5), per-guild config
+  store/                     # db (node:sqlite + FTS5), per-guild config, secrets/.env writer
   delivery/                  # notes rendering + Discord posting
   commands/                  # slash command definitions + /setup validation
-stt_sidecar/                 # Python FastAPI faster-whisper sidecar
+  web/                       # express api + server (serves web/dist)
+web/                         # React dashboard (Vite + Tailwind)
+stt_sidecar/                 # Python FastAPI faster-whisper sidecar (+ Dockerfile)
+Dockerfile                   # bot + web image (multi-stage)
+docker-compose.yml           # bot + sidecar + volumes, one-command deploy
 scripts/make-brand-art.mjs   # generates assets/{banner,logo,icon} from SVG
 test/                        # node --test suites
 docs/superpowers/            # design spec + implementation plan

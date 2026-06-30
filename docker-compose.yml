@@ -1,0 +1,58 @@
+# Parley — self-hosted Discord meeting notes
+# One command:  docker compose up -d
+#
+# Two services share a private network. The bot talks to the STT sidecar over
+# that network; only the web dashboard is published to the host, and ONLY on
+# 127.0.0.1 (it has no auth — never expose it to the internet without a proxy).
+services:
+  sidecar:
+    build:
+      context: .
+      dockerfile: stt_sidecar/Dockerfile
+    image: parley-sidecar
+    restart: unless-stopped
+    environment:
+      # Pin the whisper size here; the bot also passes a per-guild model.
+      STT_HOST: 0.0.0.0
+      STT_PORT: "8000"
+    volumes:
+      # Whisper model weights persist here (first transcription downloads them).
+      - whisper-models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Not published to the host — only the bot reaches it over the compose network.
+    expose:
+      - "8000"
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: parley-bot
+    restart: unless-stopped
+    depends_on:
+      sidecar:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Reach the sidecar by its compose service name, not localhost.
+      STT_URL: http://sidecar:8000
+      DATA_DIR: /data
+      WEB_UI: "1"
+      WEB_UI_PORT: "3000"
+      WEB_UI_HOST: 0.0.0.0
+    volumes:
+      # SQLite db + per-meeting audio.
+      - parley-data:/data
+    # Dashboard reachable at http://127.0.0.1:3000 on the HOST only.
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  parley-data:
+  whisper-models:

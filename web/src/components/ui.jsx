@@ -32,6 +32,11 @@ export const Icon = {
   Slash: (p) => <I {...p}><path d="M9 20 15 4" /></I>,
   Refresh: (p) => <I {...p}><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" /></I>,
   Alert: (p) => <I {...p}><path d="M12 9v4M12 17h.01M10.3 4l-7.6 13A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z" /></I>,
+  Radio: (p) => <I {...p}><circle cx="12" cy="12" r="2.5" /><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 16.2a6 6 0 0 0 0-8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 19.1a10 10 0 0 0 0-14.2" /></I>,
+  Stop: (p) => <I {...p}><rect x="6" y="6" width="12" height="12" rx="2.5" /></I>,
+  LogOut: (p) => <I {...p}><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15" /><path d="M10 17l5-5-5-5M15 12H3" /></I>,
+  UserPlus: (p) => <I {...p}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M19 8v6M22 11h-6" /></I>,
+  Shield: (p) => <I {...p}><path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z" /></I>,
 };
 
 /* ── Brand mark (the real Parley waveform → note logo) ──────────────────── */

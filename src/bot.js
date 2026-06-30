@@ -306,5 +306,5 @@ export function startBot({ db, audioRoot }) {
   });
 
   client.login(config.discordToken);
-  return { client, manager };
+  return { client, manager, stopAndLeave };
 }

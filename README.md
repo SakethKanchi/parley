@@ -147,7 +147,7 @@ Parley's bot connects **out** to Discord over a websocket, so it needs **no publ
 - **Cloud LLM (default):** only the final transcript *text* is sent to Gemini/OpenAI. Easiest, cheapest, great quality.
 - **Fully offline:** run [Ollama](https://ollama.com) (on the host or another box) and select it in Settings. Nothing ever leaves your network.
 
-> **Security:** the dashboard has **no authentication** and is bound to `127.0.0.1` (and, in Docker, published only to the host's localhost). To reach it from another machine, tunnel over SSH (`ssh -L 3000:127.0.0.1:3000 user@host`) or put it behind a reverse proxy **with auth** (e.g. Caddy + basic auth, Authelia, or a Tailscale/Cloudflare Tunnel). Do **not** expose port 3000 to the internet directly.
+> **Security:** the dashboard requires a **login**. On first run it seeds a default `admin` / `admin` account — sign in, then change the password from **Account** (you'll be prompted to). Admins can add more users (username + optional email + password) and reset passwords; any user can change their own. Sessions are httpOnly cookies; passwords are scrypt-hashed in the same SQLite db. The server still binds `127.0.0.1` (and, in Docker, only the host's localhost). To reach it from another machine, tunnel over SSH (`ssh -L 3000:127.0.0.1:3000 user@host`) or front it with a reverse proxy + TLS. Do **not** expose port 3000 to the internet directly.
 
 ## 📦 Prerequisites
 
@@ -360,10 +360,11 @@ For hot-reload UI development, run `npm run web` (the API on :3000) in one
 terminal and `npm run web:dev` (Vite on :5173, proxies `/api` to :3000) in
 another.
 
-**Security:** the UI binds to 127.0.0.1 only and has NO authentication. Do not
-port-forward or reverse-proxy it to the internet without adding auth first. It
-never returns API keys or the Discord token to the browser — those stay in
-`.env` and only their "is it set?" status is shown.
+**Security:** the UI binds to 127.0.0.1 only and requires a login (default
+`admin` / `admin`, change it on first sign-in). Sessions are httpOnly cookies and
+passwords are scrypt-hashed in SQLite. Still, add TLS via a reverse proxy before
+exposing it beyond localhost. It never returns API keys or the Discord token to
+the browser — those stay in `.env` and only their "is it set?" status is shown.
 
 ## 🛠️ Development
 

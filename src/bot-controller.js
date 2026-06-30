@@ -11,6 +11,7 @@ export class BotController {
     this.audioRoot = audioRoot;
     this.client = null;
     this.manager = null;
+    this.stopAndLeave = null;
     this.state = 'stopped';     // 'stopped' | 'starting' | 'ready' | 'error'
     this.error = null;
   }
@@ -30,9 +31,10 @@ export class BotController {
     this.state = 'starting';
     this.error = null;
     try {
-      const { client, manager } = startBot({ db: this.db, audioRoot: this.audioRoot });
+      const { client, manager, stopAndLeave } = startBot({ db: this.db, audioRoot: this.audioRoot });
       this.client = client;
       this.manager = manager;
+      this.stopAndLeave = stopAndLeave;
       client.once('ready', () => { this.state = 'ready'; });
       client.on('error', (e) => { this.error = e.message; });
       // discord.js emits 'invalidated' / login rejects on a bad token.
@@ -52,7 +54,23 @@ export class BotController {
     }
     this.client = null;
     this.manager = null;
+    this.stopAndLeave = null;
     this.state = 'stopped';
+  }
+
+  /** In-progress recordings (for the web dashboard's live view). */
+  liveMeetings() {
+    return this.manager ? this.manager.listActive() : [];
+  }
+
+  /** Stop a live recording in a channel from the dashboard. Best-effort. */
+  async stopMeeting(guildId, channelId) {
+    if (!this.manager) throw new Error('Bot is not running.');
+    if (!this.manager.isActive(guildId, channelId)) return { ok: false, error: 'No active recording in that channel.' };
+    // stopAndLeave both finalizes the meeting and disconnects the voice client.
+    if (this.stopAndLeave) await this.stopAndLeave(guildId, channelId);
+    else await this.manager.stop(guildId, channelId);
+    return { ok: true };
   }
 
   /** Stop then start — used after credentials change in the UI. */

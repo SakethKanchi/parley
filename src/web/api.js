@@ -42,6 +42,26 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
   // accepted directly for tests and the standalone server.
   const liveClient = () => bot?.client || client;
 
+  // Active recordings for a guild, enriched with the voice channel's current
+  // members (so the UI can show who's live). Reads in-memory bot sessions; empty
+  // when no bot is attached (e.g. the standalone read-only server).
+  function liveMeetings(guildId) {
+    const sessions = (bot && typeof bot.liveMeetings === 'function' ? bot.liveMeetings() : [])
+      .filter((s) => s.guildId === guildId);
+    const c = liveClient();
+    return sessions.map((s) => {
+      let attendees = db.listAttendees(s.meetingId).map((a) => ({ id: a.user_id, displayName: a.display_name }));
+      const channel = c?.guilds?.cache?.get(s.guildId)?.channels?.cache?.get(s.channelId);
+      if (channel?.members) {
+        // Prefer the live voice-channel roster (people who joined mid-meeting).
+        const live = [...channel.members.values()].filter((m) => !m.user?.bot)
+          .map((m) => ({ id: m.id, displayName: m.displayName }));
+        if (live.length) attendees = live;
+      }
+      return { ...s, attendees };
+    });
+  }
+
   r.get('/guilds', (_req, res) => {
     const c = liveClient();
     const fromDb = db.listGuilds().map(({ guild_id }) => guild_id);
@@ -53,6 +73,28 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
 
   r.get('/guilds/:g/meetings', (req, res) => {
     res.json(db.listRecentRich(req.params.g, 100));
+  });
+
+  // In-progress recordings for this guild, enriched with the channel's current
+  // voice members (live attendees) when a Discord client is connected. The bot
+  // holds active sessions in memory, so this is empty unless the bot is running.
+  r.get('/guilds/:g/live', (req, res) => {
+    res.json({ live: liveMeetings(req.params.g) });
+  });
+
+  // Stop a live recording from the dashboard. Finalizes the meeting (transcribe
+  // + summarize + deliver) and disconnects the bot from the voice channel.
+  r.post('/guilds/:g/live/:channelId/stop', async (req, res) => {
+    if (!bot || typeof bot.stopMeeting !== 'function') {
+      return res.status(400).json({ error: 'Live recording is not managed by this server.' });
+    }
+    try {
+      const result = await bot.stopMeeting(req.params.g, req.params.channelId);
+      if (!result.ok) return res.status(404).json(result);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // Dashboard aggregates — headline stats, talk-time leaderboard, timeline.

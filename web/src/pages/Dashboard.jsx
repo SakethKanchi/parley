@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useGuild } from '../GuildContext.jsx';
+import { useLive } from '../LiveContext.jsx';
 import { Page, PageHead, SectionHead } from '../components/Page.jsx';
 import { MeetingCard } from '../components/MeetingCard.jsx';
+import { LiveCard } from '../components/Live.jsx';
 import { Sparkline, RankBars } from '../components/charts.jsx';
 import { Avatar, Icon, Empty } from '../components/ui.jsx';
 import { fmtHours, fmtCompact, fmtMs, colorOf } from '../lib/format.js';
@@ -43,6 +45,7 @@ function StatSkeleton() {
 
 export default function Dashboard() {
   const { guildId } = useGuild();
+  const { live } = useLive();
   const [meetings, setMeetings] = useState(null);
   const [agg, setAgg] = useState(null);
   const [todos, setTodos] = useState([]);
@@ -83,6 +86,13 @@ export default function Dashboard() {
         subtitle={`${stats.totalMeetings} meetings · ${stats.people} people · ${fmtCompact(stats.totalUtterances)} utterances captured`}
         actions={<Link to="/meetings" className="btn btn-ghost">All meetings <Icon.Arrow width={15} height={15} /></Link>}
       />
+
+      {/* Live recordings in progress */}
+      {live.length > 0 && (
+        <div className="space-y-4 mb-8">
+          {live.map((s) => <LiveCard key={`${s.guildId}:${s.channelId}`} session={s} />)}
+        </div>
+      )}
 
       {/* Stat row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

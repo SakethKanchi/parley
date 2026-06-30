@@ -39,6 +39,19 @@ test('two channels record concurrently', () => {
   assert.equal(mgr.isActive('g', 'c2'), true);
 });
 
+test('listActive returns plain session data without voice handles', () => {
+  const { mgr } = makeManager();
+  const id = mgr.start({ guildId: 'g', channelId: 'c1', channelName: 'general', connection: { secret: true }, guild: {}, attendees: [] });
+  const active = mgr.listActive();
+  assert.equal(active.length, 1);
+  assert.deepEqual(active[0], {
+    meetingId: id, guildId: 'g', channelId: 'c1', channelName: 'general', startedAt: '2026-06-04T10:00:00Z',
+  });
+  // No live connection / registry leaks out to the web layer.
+  assert.equal('connection' in active[0], false);
+  assert.equal('registry' in active[0], false);
+});
+
 test('stop finalizes and clears the active key', async () => {
   const { db, mgr } = makeManager();
   const id = mgr.start({ guildId: 'g', channelId: 'c', channelName: 'x', connection: {}, guild: {}, attendees: [] });

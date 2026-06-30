@@ -15,12 +15,13 @@ export class MeetingManager {
     const k = this.key(guildId, channelId);
     if (this.active.has(k)) return this.active.get(k).meetingId;
 
-    const meetingId = this.db.createMeeting({ guildId, channelId, channelName, startedAt: this.now() });
+    const startedAt = this.now();
+    const meetingId = this.db.createMeeting({ guildId, channelId, channelName, startedAt });
     for (const a of attendees || []) this.db.addAttendee(meetingId, a.id, a.displayName);
 
     const audioDir = `${this.audioRoot}/${meetingId}`;
     const { registry, stopAll } = this.startCapture({ meetingId, connection, guild, audioDir });
-    this.active.set(k, { meetingId, connection, guild, registry, stopAll, audioDir });
+    this.active.set(k, { meetingId, guildId, channelId, channelName, startedAt, connection, guild, registry, stopAll, audioDir });
     return meetingId;
   }
 
@@ -33,5 +34,17 @@ export class MeetingManager {
     const tracks = session.registry.list();
     await this.finalize(session.meetingId, tracks, session);
     return session.meetingId;
+  }
+
+  // In-progress recordings, as plain data for the web dashboard's live view.
+  // No Discord/voice handles leak out — just what the UI needs to render.
+  listActive() {
+    return [...this.active.values()].map((s) => ({
+      meetingId: s.meetingId,
+      guildId: s.guildId,
+      channelId: s.channelId,
+      channelName: s.channelName,
+      startedAt: s.startedAt,
+    }));
   }
 }

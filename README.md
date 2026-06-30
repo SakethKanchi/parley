@@ -312,9 +312,17 @@ persists across container restarts).
 The rest of the dashboard has a Dashboard overview, a Meetings browser
 (grid/list), a per-meeting reading view with collapsible transcript and an
 "Ask this meeting" box, an Action items board filterable by person, an Analytics
-page (meetings-per-day, talk-time and word leaderboards), full-text Search, and
-Settings (summarizer provider/model picker, in-app API-key editing, whisper
-model, languages, delivery).
+page (meetings-per-day, talk-time and word leaderboards), full-text Search, a
+Commands reference (every slash command, grouped), and Settings (summarizer
+provider/model picker, in-app API-key editing, whisper model, languages,
+delivery).
+
+**Recover failed meetings without the CLI.** If a meeting fails (the STT sidecar
+was down, or the summarizer hit a transient error), it shows up with a clear
+status and a one-click **Retry** in its reading view. Parley picks the right
+recovery automatically: re-summarize when the transcript survived, or
+re-transcribe from the saved audio when it didn't. (The `scripts/*-meeting.mjs`
+helpers still exist for the terminal.)
 
 **Develop the UI without the bot.** `npm run web` serves the API + built UI
 against your existing `meetings.db` with no Discord token required, so you can

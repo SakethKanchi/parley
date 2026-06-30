@@ -212,20 +212,65 @@ export function openDb(path) {
     listGuilds() {
       return sql.prepare(
         `SELECT guild_id FROM meetings WHERE guild_id IS NOT NULL
-         UNION SELECT guild_id FROM guild_config WHERE guild_id IS NOT NULL`
+         UNION SELECT guild_id FROM guild_config WHERE guild_id IS NOT NULL
+         UNION SELECT guild_id FROM guilds WHERE guild_id IS NOT NULL`
       ).all();
     },
+    // Persist a guild's human name so the web UI can label it without a live
+    // Discord client (e.g. the standalone API server). Called on bot ready /
+    // guildCreate. Idempotent; updates the name if it changed.
+    upsertGuild(guildId, name) {
+      if (!guildId) return;
+      sql.prepare(
+        `INSERT INTO guilds (guild_id, name, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(guild_id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
+      ).run(guildId, name ?? null, new Date().toISOString());
+    },
+    // Map of guild_id -> name for every guild we've seen a name for.
+    getGuildNames() {
+      const rows = sql.prepare(`SELECT guild_id, name FROM guilds WHERE name IS NOT NULL`).all();
+      return Object.fromEntries(rows.map((r) => [r.guild_id, r.name]));
+    },
     backfillTodos() {
+      // Seed any todos missing from summaries. Use each summary's own created_at
+      // (falling back to the meeting's start) so backfilled todos carry the real
+      // meeting date — not the time the backfill happened to run. Otherwise every
+      // backfilled item collapses onto one day in the Action items view.
       const rows = sql.prepare(
-        `SELECT s.meeting_id, m.guild_id, s.notes_json
+        `SELECT s.meeting_id, m.guild_id, s.notes_json,
+                COALESCE(s.created_at, m.started_at) AS created_at
            FROM summaries s JOIN meetings m ON m.id = s.meeting_id`
       ).all();
       let n = 0;
       for (const row of rows) {
         const notes = JSON.parse(row.notes_json);
-        n += this.seedTodos(row.meeting_id, row.guild_id, notes.actionItems || []);
+        n += this.seedTodos(row.meeting_id, row.guild_id, notes.actionItems || [], row.created_at);
       }
+      // Repair pass: realign any existing todo whose created_at drifted from its
+      // summary date (e.g. seeded by an older backfill that used now()).
+      this.realignTodoDates();
       return n;
+    },
+
+    // Re-stamp every todo's created_at to its summary's created_at (or the
+    // meeting's started_at). Fixes historical rows that were all seeded with the
+    // backfill run time. Returns the number of rows changed.
+    realignTodoDates() {
+      const r = sql.prepare(
+        `UPDATE todos
+            SET created_at = COALESCE(
+              (SELECT s.created_at FROM summaries s WHERE s.meeting_id = todos.meeting_id),
+              (SELECT m.started_at FROM meetings m WHERE m.id = todos.meeting_id),
+              created_at
+            )
+          WHERE meeting_id IS NOT NULL
+            AND created_at IS NOT (
+              SELECT COALESCE(s.created_at, m.started_at)
+                FROM meetings m LEFT JOIN summaries s ON s.meeting_id = m.id
+               WHERE m.id = todos.meeting_id
+            )`
+      ).run();
+      return r.changes;
     },
 
     // ── Dashboard aggregates ────────────────────────────────────────────────

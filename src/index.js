@@ -157,7 +157,10 @@ client.once('ready', async () => {
   // old global set so it can't shadow the guild commands, then register to every
   // guild the bot is in.
   await clearGlobalCommands().catch((e) => console.error('clear global commands failed:', e.message));
-  for (const [guildId] of client.guilds.cache) {
+  for (const [guildId, guild] of client.guilds.cache) {
+    // Persist the guild's human name so the web UI can label it even when read
+    // without a live Discord client (e.g. the standalone API server).
+    db.upsertGuild(guildId, guild.name);
     await deployCommands(config.discordClientId, config.discordToken, guildId)
       .then(() => console.log(`Registered commands in guild ${guildId}`))
       .catch((e) => console.error(`deploy to guild ${guildId} failed:`, e.message));
@@ -176,10 +179,14 @@ client.once('ready', async () => {
 // Register commands when the bot joins a new guild, so they're available
 // immediately without waiting for a restart.
 client.on('guildCreate', (guild) => {
+  db.upsertGuild(guild.id, guild.name);
   deployCommands(config.discordClientId, config.discordToken, guild.id)
     .then(() => console.log(`Registered commands in new guild ${guild.id}`))
     .catch((e) => console.error(`deploy to new guild ${guild.id} failed:`, e.message));
 });
+
+// Keep the stored guild name fresh when a server is renamed.
+client.on('guildUpdate', (_old, guild) => db.upsertGuild(guild.id, guild.name));
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
   const guild = newState.guild;

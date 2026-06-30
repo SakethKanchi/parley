@@ -17,8 +17,8 @@ function audioDir(id) {
   return join(env.dataDir, 'audio', String(id));
 }
 
-function guildName(client, id) {
-  return client?.guilds?.cache?.get(id)?.name || id;
+function guildName(client, id, dbNames = {}) {
+  return client?.guilds?.cache?.get(id)?.name || dbNames[id] || id;
 }
 
 export function apiRouter({ db, client }) {
@@ -28,7 +28,8 @@ export function apiRouter({ db, client }) {
     const fromDb = db.listGuilds().map(({ guild_id }) => guild_id);
     const fromCache = client ? [...client.guilds.cache.values()].map((g) => g.id) : [];
     const allIds = [...new Set([...fromDb, ...fromCache])];
-    res.json(allIds.map((id) => ({ id, name: guildName(client, id) })));
+    const dbNames = db.getGuildNames();
+    res.json(allIds.map((id) => ({ id, name: guildName(client, id, dbNames) })));
   });
 
   r.get('/guilds/:g/meetings', (req, res) => {

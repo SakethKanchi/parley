@@ -82,3 +82,26 @@ test('meetingsTimeline returns a padded day series ending today', () => {
   assert.equal(tl[tl.length - 1].date, todayKey);
   assert.equal(tl[tl.length - 1].count, 2); // both meetings seeded "now"
 });
+
+test('backfillTodos seeds + realigns todo dates to the summary date', () => {
+  const db = openDb(':memory:');
+  const m = db.createMeeting({ guildId: 'g', channelId: 'c', channelName: 'general', startedAt: '2026-01-10T09:00:00.000Z' });
+  db.saveSummary(m, { actionItems: [{ assignee: 'A', task: 't1' }, { task: 't2' }] }, [], 'test:m', '2026-01-10T10:00:00.000Z');
+  // Simulate the old bug: a todo seeded with a wrong "now" date.
+  db.seedTodos(m, 'g', [{ assignee: 'A', task: 't1' }], '2026-06-29T18:30:42.797Z');
+  db.backfillTodos();
+  const todos = db.listTodos('g');
+  assert.equal(todos.length, 2);
+  for (const t of todos) {
+    assert.equal(t.created_at, '2026-01-10T10:00:00.000Z'); // realigned to summary created_at
+  }
+});
+
+test('realignTodoDates falls back to meeting start when no summary date', () => {
+  const db = openDb(':memory:');
+  const m = db.createMeeting({ guildId: 'g', channelId: 'c', channelName: 'general', startedAt: '2026-02-01T08:00:00.000Z' });
+  db.seedTodos(m, 'g', [{ task: 'orphan' }], '2026-06-29T18:30:42.797Z');
+  const changed = db.realignTodoDates();
+  assert.ok(changed >= 1);
+  assert.equal(db.listTodos('g')[0].created_at, '2026-02-01T08:00:00.000Z');
+});

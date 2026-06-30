@@ -18,6 +18,7 @@
 <p align="center">
   <a href="https://sakethkanchi.github.io/parley-landing/"><b>🌐 Website</b></a> ·
   <a href="#-demo"><b>🎬 Demo</b></a> ·
+  <a href="#-quick-start-docker"><b>🐳 Quick start</b></a> ·
   <a href="#-installation"><b>🚀 Install</b></a> ·
   <a href="#-commands"><b>💬 Commands</b></a> ·
   <a href="#-privacy--consent"><b>🔒 Privacy</b></a>
@@ -67,10 +68,12 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 
 - **Per-speaker transcripts, no ML diarization.** Discord delivers a separate audio stream per user, so every utterance is attributed to the right person exactly — not guessed.
 - **Structured AI notes.** TL;DR, topic sections, decisions, open questions, and **action items grouped by the person responsible**, plus per-speaker talk-time stats.
+- **Full web dashboard.** A local control panel to browse meetings, read notes, work the action-item list, see talk-time analytics, search transcripts, and configure everything. Connect your Discord bot and edit settings right from the browser — no editing files.
 - **Pluggable summarizer.** Google Gemini (default, free tier), any OpenAI-compatible endpoint, or fully-offline Ollama — switch per-server with `/setup`, no restart.
 - **Local speech-to-text.** A warm [faster-whisper](https://github.com/SYSTRAN/faster-whisper) sidecar; pick model size from `tiny` to `large-v3-turbo`.
-- **Runs anywhere.** Node's built-in `node:sqlite` (no native build) — works on a Raspberry Pi or a GPU server; only a config value changes.
+- **Self-host in one command.** `docker compose up -d` runs the bot, the whisper sidecar, and the dashboard together. No public IP or port forwarding needed.
 - **Searchable history.** `/history`, `/summary`, `/raw`, and full-text `/search` over every past meeting, backed by SQLite FTS5.
+- **Resilient.** Failed transcriptions or summaries are retryable with one click from the dashboard (or the CLI).
 - **Auto join/leave.** Joins when 2+ people are talking, leaves when the room empties. Shows `[REC]` in its nickname while recording.
 - **Concurrent meetings.** Records multiple channels/servers at once — no global single-recording limit.
 

@@ -71,6 +71,34 @@ function Card({ title, desc, children }) {
   );
 }
 
+function PromptEditor({ value, defaultValue, onSave }) {
+  const [draft, setDraft] = useState(value);
+  const [busy, setBusy] = useState(false);
+  const changed = draft !== value;
+  useEffect(() => { setDraft(value); }, [value]);
+
+  async function savePrompt(next) {
+    setBusy(true);
+    const ok = await onSave({ summaryPrompt: next });
+    if (ok) setDraft(next);
+    setBusy(false);
+  }
+
+  return (
+    <Field label="Summary prompt" hint="Instructions sent to the summarizer before the meeting details and transcript. Keep the JSON output shape if you want structured notes and todos.">
+      <textarea className="input min-h-64 font-mono text-xs resize-y" aria-label="Summary prompt"
+        value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={20000} />
+      <div className="flex flex-wrap gap-2 mt-2">
+        <button type="button" className="btn btn-primary" disabled={busy || !changed || !draft.trim()}
+          onClick={() => savePrompt(draft.trim())}>Save prompt</button>
+        <button type="button" className="btn btn-ghost" disabled={busy || value === defaultValue}
+          onClick={() => savePrompt(defaultValue)}>Restore default</button>
+        {changed && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setDraft(value)}>Discard changes</button>}
+      </div>
+    </Field>
+  );
+}
+
 function Switch({ checked, onChange, label, desc }) {
   return (
     <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
@@ -314,7 +342,7 @@ export default function Setup() {
     </Page>
   );
 
-  const { config: c, providers, sttProviders, channels, secrets = {}, defaultModels = {} } = data;
+  const { config: c, providers, sttProviders, channels, secrets = {}, defaultModels = {}, defaultSummaryPrompt } = data;
   const save = async (patch) => {
     try {
       const r = await api.saveConfig(guildId, patch);
@@ -431,6 +459,7 @@ export default function Setup() {
             )}
           </Field>
           )}
+          <PromptEditor key={guildId} value={c.summaryPrompt} defaultValue={defaultSummaryPrompt} onSave={save} />
         </Card>
 
         <Card title="Transcription" desc="How spoken audio becomes text.">

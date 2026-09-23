@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../src/store/db.js';
+import { getGuildConfig } from '../src/store/config.js';
 
 test('openDb adds timings_json to a fresh db', () => {
   const db = openDb(':memory:');
@@ -17,6 +18,7 @@ test('openDb adds timings_json to a fresh db', () => {
 test('openDb migrates an existing db created before timings_json existed', () => {
   const dir = mkdtempSync(join(tmpdir(), 'parley-db-migration-'));
   const path = join(dir, 'meetings.db');
+  let db;
   try {
     // Simulate a pre-migration db: the same summaries table, minus timings_json.
     const raw = new DatabaseSync(path);
@@ -31,7 +33,12 @@ test('openDb migrates an existing db created before timings_json existed', () =>
         meeting_id INTEGER PRIMARY KEY,
         notes_json TEXT, talktime_json TEXT, model_used TEXT, created_at TEXT
       );
+      CREATE TABLE guild_config (
+        guild_id TEXT PRIMARY KEY, summarizer_provider TEXT,
+        summary_language TEXT
+      );
     `);
+    raw.prepare(`INSERT INTO guild_config (guild_id, summarizer_provider) VALUES ('g', 'ollama')`).run();
     const meetingId = raw.prepare(
       `INSERT INTO meetings (guild_id, channel_id, channel_name, started_at, status) VALUES ('g','c','x','t','done')`
     ).run().lastInsertRowid;
@@ -42,7 +49,7 @@ test('openDb migrates an existing db created before timings_json existed', () =>
 
     // Reopening through openDb must run the migration without losing the
     // pre-existing row, and getSummary must null-safely report no timings.
-    const db = openDb(path);
+    db = openDb(path);
     const cols = db.sql.prepare(`PRAGMA table_info(summaries)`).all();
     assert.ok(cols.some((c) => c.name === 'timings_json'));
     const s = db.getSummary(meetingId);
@@ -54,7 +61,10 @@ test('openDb migrates an existing db created before timings_json existed', () =>
     const updated = db.getSummary(meetingId);
     assert.equal(updated.timings.transcribeMs, 10);
     assert.equal(updated.timings.summarizeMs, 5);
+    assert.ok(db.sql.prepare(`PRAGMA table_info(guild_config)`).all().some((c) => c.name === 'summary_prompt'));
+    assert.match(getGuildConfig(db, 'g').summaryPrompt, /meeting-notes assistant/);
   } finally {
+    db?.sql.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });

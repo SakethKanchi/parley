@@ -70,6 +70,7 @@ export async function processMeeting(db, meetingId, opts) {
     date: meeting.started_at,
     attendees,
     summaryLanguage: resolveSummaryLanguage(opts.cfg),
+    summaryPrompt: opts.cfg.summaryPrompt,
   };
 
   let notes;

@@ -28,3 +28,7 @@ Rules:
 - Points name people, tools, numbers, and decisions; "discussed X" is not a point.
 - Density belongs in topics, decisions, openQuestions, and actionItems — not the tldr (2–4 sentences).
 - If the transcript is short or unclear, still return the JSON with best-effort empty arrays.`;
+
+export function summaryPrompt(meta = {}) {
+  return meta.summaryPrompt ?? SUMMARY_PROMPT;
+}

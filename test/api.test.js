@@ -84,6 +84,7 @@ test('GET config returns providers + PATCH validates', async () => {
     assert.equal('openrouter' in (cfg.secrets || {}), true);
     assert.equal(cfg.defaultModels?.openrouter, 'openai/gpt-4o-mini');
     assert.equal(cfg.config.summarizerProvider, 'gemini'); // default
+    assert.equal(cfg.config.summaryPrompt, cfg.defaultSummaryPrompt);
 
     // invalid provider rejected with 400
     const bad = await fetch(`${base}/api/guilds/g1/config`, {
@@ -99,6 +100,20 @@ test('GET config returns providers + PATCH validates', async () => {
     });
     assert.equal(ok.status, 200);
     assert.equal((await ok.json()).config.whisperModel, 'base');
+
+    const prompt = await fetch(`${base}/api/guilds/g1/config`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ summaryPrompt: 'Return JSON meeting notes.' }),
+    });
+    assert.equal(prompt.status, 200);
+    assert.equal((await prompt.json()).config.summaryPrompt, 'Return JSON meeting notes.');
+    assert.equal((await (await fetch(`${base}/api/guilds/g1/config`)).json()).config.summaryPrompt, 'Return JSON meeting notes.');
+
+    const emptyPrompt = await fetch(`${base}/api/guilds/g1/config`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ summaryPrompt: '   ' }),
+    });
+    assert.equal(emptyPrompt.status, 400);
   } finally { close(); }
 });
 

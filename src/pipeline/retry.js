@@ -61,6 +61,7 @@ export async function retryMeeting(db, meetingId, { dataDir, deliver = null } = 
       channelName: meeting.channel_name, date: meeting.started_at,
       attendees: db.listAttendees(meetingId).map((a) => a.display_name),
       summaryLanguage: resolveSummaryLanguage(cfg),
+      summaryPrompt: cfg.summaryPrompt,
     };
     db.setMeetingStatus(meetingId, 'processing');
     let notes;

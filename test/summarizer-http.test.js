@@ -94,3 +94,17 @@ test('summarizer prompt includes the summary-language instruction', async () => 
   const prompt = sentBody.messages[0].content;
   assert.match(prompt, /Write the entire summary in German\./);
 });
+
+test('summarizer uses a configured prompt with the language and transcript', async () => {
+  let sentBody;
+  const fetchImpl = async (_url, opts) => {
+    sentBody = JSON.parse(opts.body);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"tldr":"x"}' } }] }) };
+  };
+  const s = new OpenAISummarizer('m', 'http://x', 'k', fetchImpl);
+  await s.summarize('hello transcript', { summaryPrompt: 'Use my custom format.', summaryLanguage: 'de' });
+  const prompt = sentBody.messages[0].content;
+  assert.match(prompt, /^Use my custom format\./);
+  assert.match(prompt, /Write the entire summary in German\./);
+  assert.match(prompt, /Transcript:\nhello transcript/);
+});

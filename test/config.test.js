@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/store/db.js';
 import { getGuildConfig, setGuildConfig, DEFAULTS } from '../src/store/config.js';
+import { SUMMARY_PROMPT } from '../src/adapters/summarizer/notes.js';
 
 test('getGuildConfig returns defaults for unknown guild', () => {
   const db = openDb(':memory:');
@@ -59,6 +60,15 @@ test('setGuildConfig persists summaryLanguage', () => {
   const db = openDb(':memory:');
   setGuildConfig(db, 'g', { summaryLanguage: 'de' });
   assert.equal(getGuildConfig(db, 'g').summaryLanguage, 'de');
+});
+
+test('summary prompt defaults to the existing instructions and persists per guild', () => {
+  const db = openDb(':memory:');
+  assert.equal(getGuildConfig(db, 'g1').summaryPrompt, SUMMARY_PROMPT);
+  setGuildConfig(db, 'g1', { summaryPrompt: 'Return concise JSON notes.' });
+  setGuildConfig(db, 'g1', { language: 'de' });
+  assert.equal(getGuildConfig(db, 'g1').summaryPrompt, 'Return concise JSON notes.');
+  assert.equal(getGuildConfig(db, 'g2').summaryPrompt, SUMMARY_PROMPT);
 });
 
 test('sttProvider defaults to sidecar', () => {

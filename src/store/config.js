@@ -1,3 +1,5 @@
+import { SUMMARY_PROMPT } from '../adapters/summarizer/notes.js';
+
 export const DEFAULTS = {
   summarizerProvider: 'gemini',
   summarizerModel: 'gemini-2.5-flash',
@@ -13,6 +15,7 @@ export const DEFAULTS = {
   autoJoin: true,
   language: 'auto',
   summaryLanguage: 'en',
+  summaryPrompt: SUMMARY_PROMPT,
 };
 
 const COLS = {
@@ -28,6 +31,7 @@ const COLS = {
   autoJoin: 'auto_join',
   language: 'language',
   summaryLanguage: 'summary_language',
+  summaryPrompt: 'summary_prompt',
 };
 
 function fromRow(row) {
@@ -44,6 +48,7 @@ function fromRow(row) {
     autoJoin: row.auto_join == null ? DEFAULTS.autoJoin : !!row.auto_join,
     language: row.language ?? DEFAULTS.language,
     summaryLanguage: row.summary_language ?? DEFAULTS.summaryLanguage,
+    summaryPrompt: row.summary_prompt ?? DEFAULTS.summaryPrompt,
   };
 }
 
@@ -60,8 +65,8 @@ export function setGuildConfig(db, guildId, patch) {
   const merged = { ...current, ...safePatch, guildId };
   db.sql.prepare(
     `INSERT OR REPLACE INTO guild_config
-       (guild_id, summarizer_provider, summarizer_model, summarizer_fallback_provider, summarizer_fallback_model, stt_provider, stt_model, whisper_model, notes_channel_id, use_thread, auto_join, language, summary_language)
-     VALUES (@guildId, @summarizerProvider, @summarizerModel, @summarizerFallbackProvider, @summarizerFallbackModel, @sttProvider, @sttModel, @whisperModel, @notesChannelId, @useThread, @autoJoin, @language, @summaryLanguage)`
+       (guild_id, summarizer_provider, summarizer_model, summarizer_fallback_provider, summarizer_fallback_model, stt_provider, stt_model, whisper_model, notes_channel_id, use_thread, auto_join, language, summary_language, summary_prompt)
+     VALUES (@guildId, @summarizerProvider, @summarizerModel, @summarizerFallbackProvider, @summarizerFallbackModel, @sttProvider, @sttModel, @whisperModel, @notesChannelId, @useThread, @autoJoin, @language, @summaryLanguage, @summaryPrompt)`
   ).run({
     guildId,
     summarizerProvider: merged.summarizerProvider,
@@ -76,6 +81,7 @@ export function setGuildConfig(db, guildId, patch) {
     autoJoin: merged.autoJoin ? 1 : 0,
     language: merged.language,
     summaryLanguage: merged.summaryLanguage,
+    summaryPrompt: merged.summaryPrompt,
   });
   return merged;
 }

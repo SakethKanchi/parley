@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { ChannelType } from 'discord.js';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { getGuildConfig, setGuildConfig } from '../store/config.js';
+import { getGuildConfig, setGuildConfig, DEFAULTS } from '../store/config.js';
 import { validateSetup, availableProviders } from '../commands/setup-logic.js';
 import { config as env } from '../config/env.js';
 import { askMeeting } from '../adapters/summarizer/ask.js';
@@ -223,6 +223,7 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
       channelName: target.channel_name, date: target.started_at,
       attendees: db.listAttendees(targetId).map((a) => a.display_name),
       summaryLanguage: resolveSummaryLanguage(cfg),
+      summaryPrompt: cfg.summaryPrompt,
     };
     try {
       const summarizer = getSummarizer(cfg);
@@ -267,6 +268,7 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
       : [];
     res.json({
       config: getGuildConfig(db, req.params.g),
+      defaultSummaryPrompt: DEFAULTS.summaryPrompt,
       providers: availableProviders(env),
       sttProviders: availableSttProviders(env),
       channels,

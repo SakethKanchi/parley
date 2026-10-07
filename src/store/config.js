@@ -1,5 +1,3 @@
-import { SUMMARY_PROMPT } from '../adapters/summarizer/notes.js';
-
 export const DEFAULTS = {
   summarizerProvider: 'gemini',
   summarizerModel: 'gemini-2.5-flash',
@@ -15,7 +13,9 @@ export const DEFAULTS = {
   autoJoin: true,
   language: 'auto',
   summaryLanguage: 'en',
-  summaryPrompt: SUMMARY_PROMPT,
+  // null = the built-in SUMMARY_PROMPT (notes.js), resolved at summarize time so
+  // prompt improvements reach every server that hasn't written its own.
+  summaryPrompt: null,
 };
 
 const COLS = {

@@ -71,16 +71,18 @@ function Card({ title, desc, children }) {
   );
 }
 
+// value is the server's own prompt, or null when it uses the built-in default.
 function PromptEditor({ value, defaultValue, onSave }) {
-  const [draft, setDraft] = useState(value);
+  const current = value ?? defaultValue;
+  const [draft, setDraft] = useState(current);
   const [busy, setBusy] = useState(false);
-  const changed = draft !== value;
-  useEffect(() => { setDraft(value); }, [value]);
+  const changed = draft !== current;
+  useEffect(() => { setDraft(current); }, [current]);
 
   async function savePrompt(next) {
     setBusy(true);
     const ok = await onSave({ summaryPrompt: next });
-    if (ok) setDraft(next);
+    if (ok) setDraft(next ?? defaultValue);
     setBusy(false);
   }
 
@@ -91,9 +93,9 @@ function PromptEditor({ value, defaultValue, onSave }) {
       <div className="flex flex-wrap gap-2 mt-2">
         <button type="button" className="btn btn-primary" disabled={busy || !changed || !draft.trim()}
           onClick={() => savePrompt(draft.trim())}>Save prompt</button>
-        <button type="button" className="btn btn-ghost" disabled={busy || value === defaultValue}
-          onClick={() => savePrompt(defaultValue)}>Restore default</button>
-        {changed && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setDraft(value)}>Discard changes</button>}
+        <button type="button" className="btn btn-ghost" disabled={busy || value == null}
+          onClick={() => savePrompt(null)}>Restore default</button>
+        {changed && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setDraft(current)}>Discard changes</button>}
       </div>
     </Field>
   );

@@ -62,7 +62,7 @@ test('openDb migrates an existing db created before timings_json existed', () =>
     assert.equal(updated.timings.transcribeMs, 10);
     assert.equal(updated.timings.summarizeMs, 5);
     assert.ok(db.sql.prepare(`PRAGMA table_info(guild_config)`).all().some((c) => c.name === 'summary_prompt'));
-    assert.match(getGuildConfig(db, 'g').summaryPrompt, /meeting-notes assistant/);
+    assert.equal(getGuildConfig(db, 'g').summaryPrompt, null);
   } finally {
     db?.sql.close();
     rmSync(dir, { recursive: true, force: true });

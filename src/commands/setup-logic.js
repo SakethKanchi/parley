@@ -98,11 +98,14 @@ export function validateSetup(input, env) {
     patch.summaryLanguage = input.summary_language;
   }
 
-  if (input.summaryPrompt !== undefined) {
-    if (typeof input.summaryPrompt !== 'string' || !input.summaryPrompt.trim() || input.summaryPrompt.length > 20000) {
+  if (input.summaryPrompt === null) {
+    patch.summaryPrompt = null; // restore the built-in prompt
+  } else if (input.summaryPrompt !== undefined) {
+    const prompt = typeof input.summaryPrompt === 'string' ? input.summaryPrompt.trim() : '';
+    if (!prompt || prompt.length > 20000) {
       return { ok: false, error: 'Summary prompt must be non-empty text of at most 20,000 characters.' };
     }
-    patch.summaryPrompt = input.summaryPrompt.trim();
+    patch.summaryPrompt = prompt;
   }
 
   return { ok: true, patch };

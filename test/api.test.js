@@ -84,7 +84,7 @@ test('GET config returns providers + PATCH validates', async () => {
     assert.equal('openrouter' in (cfg.secrets || {}), true);
     assert.equal(cfg.defaultModels?.openrouter, 'openai/gpt-4o-mini');
     assert.equal(cfg.config.summarizerProvider, 'gemini'); // default
-    assert.equal(cfg.config.summaryPrompt, cfg.defaultSummaryPrompt);
+    assert.equal(cfg.config.summaryPrompt, null); // null = built-in prompt
 
     // invalid provider rejected with 400
     const bad = await fetch(`${base}/api/guilds/g1/config`, {
@@ -114,6 +114,20 @@ test('GET config returns providers + PATCH validates', async () => {
       body: JSON.stringify({ summaryPrompt: '   ' }),
     });
     assert.equal(emptyPrompt.status, 400);
+
+    const restored = await fetch(`${base}/api/guilds/g1/config`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ summaryPrompt: null }),
+    });
+    assert.equal(restored.status, 200);
+    assert.equal((await restored.json()).config.summaryPrompt, null);
+
+    // Length is checked after trimming, so padding around a valid prompt is fine.
+    const padded = await fetch(`${base}/api/guilds/g1/config`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ summaryPrompt: `  ${'x'.repeat(20000)}  ` }),
+    });
+    assert.equal(padded.status, 200);
   } finally { close(); }
 });
 

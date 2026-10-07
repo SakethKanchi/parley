@@ -3,13 +3,14 @@ import { Router } from 'express';
 import { ChannelType } from 'discord.js';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { getGuildConfig, setGuildConfig, DEFAULTS } from '../store/config.js';
+import { getGuildConfig, setGuildConfig } from '../store/config.js';
 import { validateSetup, availableProviders } from '../commands/setup-logic.js';
 import { config as env } from '../config/env.js';
 import { askMeeting } from '../adapters/summarizer/ask.js';
 import { getSummarizer } from '../adapters/summarizer/index.js';
 import { buildTranscript, computeTalkTime } from '../pipeline/summarize.js';
 import { resolveSummaryLanguage } from '../adapters/summarizer/languages.js';
+import { SUMMARY_PROMPT } from '../adapters/summarizer/notes.js';
 import { listModels, clearModelCache, DEFAULT_MODELS, CATALOG_PROVIDERS } from '../adapters/summarizer/models.js';
 import { secretStatus, setProviderKey, isSecretProvider, connectionStatus, setConnection } from '../store/secrets.js';
 import { COMMAND_CATALOG } from '../commands/definitions.js';
@@ -268,7 +269,7 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
       : [];
     res.json({
       config: getGuildConfig(db, req.params.g),
-      defaultSummaryPrompt: DEFAULTS.summaryPrompt,
+      defaultSummaryPrompt: SUMMARY_PROMPT,
       providers: availableProviders(env),
       sttProviders: availableSttProviders(env),
       channels,

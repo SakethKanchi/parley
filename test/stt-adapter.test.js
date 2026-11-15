@@ -45,6 +45,14 @@ test('normalize tolerates an empty/garbage body', () => {
   assert.deepEqual(normalize({}), { text: '', words: [], language: undefined });
 });
 
+test('normalize maps gpt-transcribe detected languages to the adapter language', () => {
+  assert.deepEqual(normalize({ text: ' Hallo ', languages: [{ code: 'de' }, { code: 'en' }] }), {
+    text: 'Hallo', words: [], language: 'de',
+  });
+  assert.equal(normalize({ text: 'hello', languages: [] }).language, undefined);
+  assert.equal(normalize({ text: 'hello', language: 'en', languages: [{ code: 'de' }] }).language, 'en');
+});
+
 // ── createOpenAICompatibleSTT ────────────────────────────────────────────────
 
 test('openai-compatible posts to /audio/transcriptions with bearer + verbose_json', async () => {
@@ -85,6 +93,21 @@ test('openai-compatible defaults to an OpenAI transcription model', async () => 
   await stt('/tmp/a.wav');
   assert.equal(calls[0].init.body.get('model'), 'whisper-1');
 });
+
+for (const language of ['de', 'auto', undefined]) {
+  test(`gpt-transcribe uses JSON and language hints for ${language ?? 'unspecified language'}`, async () => {
+    const { fetchImpl, calls } = captureFetch([{ ok: true, status: 200, body: { text: ' Hallo ', languages: [{ code: 'de' }] } }]);
+    const stt = createOpenAICompatibleSTT({ baseUrl: 'https://api.openai.com/v1', apiKey: 'k' }, { fetchImpl, readFile: fakeRead });
+    const out = await stt('/tmp/a.wav', { model: 'gpt-transcribe', language });
+    const form = calls[0].init.body;
+    assert.equal(form.get('model'), 'gpt-transcribe');
+    assert.equal(form.get('response_format'), 'json');
+    assert.equal(form.has('timestamp_granularities[]'), false);
+    assert.equal(form.has('language'), false);
+    assert.deepEqual(form.getAll('languages[]'), language === 'de' ? ['de'] : []);
+    assert.deepEqual(out, { text: 'Hallo', words: [], language: 'de' });
+  });
+}
 
 test('openai-compatible omits language when auto', async () => {
   const { fetchImpl, calls } = captureFetch([{ ok: true, status: 200, body: { text: 'x', words: [] } }]);
@@ -145,6 +168,7 @@ test('resolveSttModel uses whisperModel for sidecar', () => {
 });
 
 test('resolveSttModel uses sttModel for cloud, falling back to default', () => {
+  assert.equal(resolveSttModel({ sttProvider: 'openai', sttModel: 'gpt-transcribe' }), 'gpt-transcribe');
   assert.equal(resolveSttModel({ sttProvider: 'openai', sttModel: 'gpt-4o-transcribe' }), 'gpt-4o-transcribe');
   assert.equal(resolveSttModel({ sttProvider: 'openai' }), 'whisper-1');
 });
@@ -184,5 +208,6 @@ test('availableSttProviders lists every provider with models + readiness', () =>
   const openai = list.find((p) => p.provider === 'openai');
   assert.equal(openai.ok, true);
   assert.deepEqual(openai.models, STT_MODELS.openai);
+  assert.ok(openai.models.includes('gpt-transcribe'));
   assert.equal(list.find((p) => p.provider === 'sidecar').ok, true);
 });

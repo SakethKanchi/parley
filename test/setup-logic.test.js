@@ -107,6 +107,17 @@ test('accepts openai STT with key and a valid model', () => {
   assert.equal(r.patch.sttModel, 'whisper-1');
 });
 
+test('accepts gpt-transcribe with provider selection or as a model-only change', () => {
+  for (const input of [
+    { sttProvider: 'openai', sttModel: 'gpt-transcribe' },
+    { currentSttProvider: 'openai', sttModel: 'gpt-transcribe' },
+  ]) {
+    const r = validateSetup(input, { ...env, openai: { apiKey: 'k' } });
+    assert.equal(r.ok, true);
+    assert.equal(r.patch.sttModel, 'gpt-transcribe');
+  }
+});
+
 test('rejects an invalid openai STT model', () => {
   const r = validateSetup({ sttProvider: 'openai', sttModel: 'whisper-9000' }, { ...env, openai: { apiKey: 'k' } });
   assert.equal(r.ok, false);

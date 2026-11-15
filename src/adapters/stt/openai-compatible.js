@@ -5,8 +5,8 @@ import { basename } from 'node:path';
 // (POST {baseUrl}/audio/transcriptions). OpenAI and other OpenAI-compatible
 // providers share this endpoint, but response formats depend on the model.
 //
-// Whisper supports verbose_json with word timestamps. GPT-4o transcription
-// models only support JSON without timestamps; the pipeline uses the recorded
+// Whisper supports verbose_json with word timestamps. GPT transcription
+// models use JSON without timestamps; the pipeline uses the recorded
 // audio duration when the normalized response has no words.
 export function createOpenAICompatibleSTT({ baseUrl, apiKey, label = 'STT' }, deps = {}) {
   const fetchImpl = deps.fetchImpl || fetch;
@@ -21,7 +21,8 @@ export function createOpenAICompatibleSTT({ baseUrl, apiKey, label = 'STT' }, de
     if (!apiKey) throw new Error(`${label}: API key is not set.`);
     const bytes = await readFile(filePath);
     const model = opts.model || 'whisper-1';
-    const jsonOnly = /^gpt-4o(?:-mini)?-transcribe(?:-|$)/.test(model);
+    const isGptTranscribe = model === 'gpt-transcribe';
+    const jsonOnly = isGptTranscribe || /^gpt-4o(?:-mini)?-transcribe(?:-|$)/.test(model);
     let lastErr;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -30,9 +31,11 @@ export function createOpenAICompatibleSTT({ baseUrl, apiKey, label = 'STT' }, de
         form.append('model', model);
         form.append('response_format', jsonOnly ? 'json' : 'verbose_json');
         if (!jsonOnly) form.append('timestamp_granularities[]', 'word');
-        // Whisper auto-detects language when none is supplied; only pin it when
-        // the user picked a specific ISO code (our 'auto' sentinel means detect).
-        if (opts.language && opts.language !== 'auto') form.append('language', opts.language);
+        // Only send a language hint when the user picked an ISO code. The new
+        // gpt-transcribe model takes languages[] instead of singular language.
+        if (opts.language && opts.language !== 'auto') {
+          form.append(isGptTranscribe ? 'languages[]' : 'language', opts.language);
+        }
         const res = await fetchImpl(url, {
           method: 'POST',
           headers: { Authorization: `Bearer ${apiKey}` },
@@ -71,5 +74,5 @@ export function normalize(json) {
       .filter((s) => typeof s.end === 'number')
       .map((s) => ({ word: s.text, start: s.start, end: s.end }));
   }
-  return { text, words, language: json?.language };
+  return { text, words, language: json?.language ?? json?.languages?.[0]?.code };
 }

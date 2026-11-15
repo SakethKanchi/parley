@@ -1,4 +1,4 @@
-import { convertPcmToWav } from '../voice/audio.js';
+import { convertPcmToWav, getPcmDurationMs } from '../voice/audio.js';
 import { getSTT, resolveSttModel } from '../adapters/stt/index.js';
 import { unlink } from 'node:fs/promises';
 
@@ -35,12 +35,14 @@ export async function transcribeTracks(tracks, cfg = {}, deps = {}) {
         const { text, words } = await stt(wavPath, cfg);
         const clean = (text || '').trim();
         if (!clean) continue; // silent track — not a failure, just nothing said
-        const lastEnd = words && words.length ? words[words.length - 1].end : 0;
+        const durationMs = words && words.length
+          ? words[words.length - 1].end * 1000
+          : await getPcmDurationMs(t.pcmPath);
         results[i] = {
           userId: t.userId,
           displayName: t.displayName,
           startMs: t.startMs,
-          endMs: t.startMs + Math.round(lastEnd * 1000),
+          endMs: t.startMs + Math.round(durationMs),
           text: clean,
         };
       } catch (err) {

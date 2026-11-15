@@ -346,9 +346,9 @@ All providers return the same structured-notes shape, so output is consistent re
 Speech-to-text is pluggable per server. The default needs no API key; the cloud options need no Python sidecar.
 
 - **sidecar** *(default)* — local [faster-whisper](https://github.com/SYSTRAN/faster-whisper) running in its own container. Fully offline and free. Transcription runs on your **NVIDIA GPU automatically** when available (falls back to CPU; override with `STT_DEVICE=cpu|cuda` and `STT_COMPUTE`), and uses **batched inference** for 1.7–2.6x throughput (`STT_BATCH_SIZE` tunes the batch, `0` disables). Pick a model size from `tiny` to `large-v3-turbo`.
-- **openai** — OpenAI or any OpenAI-compatible `/audio/transcriptions` endpoint. Set `OPENAI_API_KEY` (and `OPENAI_BASE_URL`). Lets you skip running the sidecar entirely.
+- **openai** — OpenAI or any OpenAI-compatible `/audio/transcriptions` endpoint. Supports `gpt-transcribe`, `whisper-1`, `gpt-4o-transcribe`, and `gpt-4o-mini-transcribe`. Set `OPENAI_API_KEY` (and `OPENAI_BASE_URL`). Lets you skip running the sidecar entirely.
 
-Every backend returns the same `{ text, words }` shape with word-level timestamps, so per-speaker attribution and talk-time stats work the same way regardless of provider. Switch in **Settings → Transcription** or with `/setup stt_provider:…`.
+Every backend returns the same `{ text, words }` shape. Whisper provides timestamps; `gpt-transcribe`, `gpt-4o-transcribe`, and `gpt-4o-mini-transcribe` return text without timestamps, so Parley uses the recorded track duration for transcript end times and talk-time stats. Speaker attribution comes from each user's separate audio track. Switch in **Settings → Transcription** or with `/setup stt_provider:openai stt_model:gpt-transcribe`.
 
 > Want to try it before wiring up a meeting? `node scripts/try-stt.mjs --provider openai` transcribes a recorded `.pcm` track (or any `--file`) and prints the text + timing.
 

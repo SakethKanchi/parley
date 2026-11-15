@@ -45,6 +45,12 @@ test('stt_provider option offers sidecar and openai choices', () => {
   assert.ok(values.includes('openai'));
 });
 
+test('stt_model option offers gpt-transcribe', () => {
+  const setup = commandsJSON().find((c) => c.name === 'setup');
+  const model = setup.options.find((o) => o.name === 'stt_model');
+  assert.ok(model.choices.some((c) => c.value === 'gpt-transcribe'));
+});
+
 test('language option offers a German choice and auto', () => {
   const setup = commandsJSON().find((c) => c.name === 'setup');
   const lang = setup.options.find((o) => o.name === 'language');

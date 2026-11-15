@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, rm, access } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { transcribeTracks } from '../src/pipeline/transcribe.js';
 
 test('transcribeTracks maps each track to a labeled utterance', async () => {
@@ -34,6 +37,36 @@ test('transcribeTracks computes endMs from last word timestamp', async () => {
   const { utterances: utts } = await transcribeTracks(tracks, {}, deps);
   assert.equal(utts[0].endMs, 1000 + 2000); // startMs + last word end (2.0s)
 });
+
+for (const model of ['gpt-4o-transcribe', 'gpt-transcribe']) {
+  test(`${model} transcripts use recorded PCM duration when timestamps are absent`, async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'parley-transcribe-test-'));
+    try {
+      const pcmPath = join(dir, 'speaker.pcm');
+      // 2.5 seconds of 16 kHz mono, 16-bit audio.
+      await writeFile(pcmPath, Buffer.alloc(80_000));
+      const { utterances, failures } = await transcribeTracks(
+        [{ userId: 'u1', displayName: 'Alice', startMs: 1000, pcmPath }],
+        { sttProvider: 'openai', sttModel: model },
+        {
+          env: { openai: { apiKey: 'test', baseUrl: 'https://api.openai.com/v1' } },
+          sttDeps: { fetchImpl: async (_url, { body }) => {
+            assert.equal(body.get('model'), model);
+            assert.equal(body.get('response_format'), 'json');
+            assert.equal(body.has('timestamp_granularities[]'), false);
+            return { ok: true, json: async () => ({ text: 'hello team' }) };
+          } },
+        },
+      );
+      assert.deepEqual(failures, []);
+      assert.deepEqual(utterances, [{ userId: 'u1', displayName: 'Alice', startMs: 1000, endMs: 3500, text: 'hello team' }]);
+      await assert.rejects(access(pcmPath.replace(/\.pcm$/, '.wav')), { code: 'ENOENT' });
+      await access(pcmPath);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+}
 
 test('transcribeTracks preserves original track order regardless of completion order', async () => {
   const tracks = [

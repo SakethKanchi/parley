@@ -23,6 +23,13 @@ const BITS_PER_SAMPLE = 16;
 const BLOCK_ALIGN = (CHANNELS * BITS_PER_SAMPLE) / 8; // 2
 const BYTE_RATE = SAMPLE_RATE * BLOCK_ALIGN; // 32000
 
+// Recorded tracks have a fixed PCM format, so their size gives their duration
+// even when a transcription model returns text without timestamps.
+export async function getPcmDurationMs(pcmPath) {
+  const { size } = await stat(pcmPath);
+  return (size / BYTE_RATE) * 1000;
+}
+
 export function wavHeader(dataLength) {
   const buf = Buffer.alloc(44);
   buf.write('RIFF', 0, 'ascii');

@@ -17,7 +17,7 @@ export const STT_PROVIDERS = ['sidecar', 'openai'];
 // are faster-whisper sizes (downloaded on demand); cloud models are API IDs.
 export const STT_MODELS = {
   sidecar: ['tiny', 'base', 'small', 'medium', 'large-v3', 'large-v3-turbo'],
-  openai: ['whisper-1', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'],
+  openai: ['whisper-1', 'gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'],
 };
 
 export const STT_PROVIDER_LABELS = {

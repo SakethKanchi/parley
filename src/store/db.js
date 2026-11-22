@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS guild_config (
   stt_provider TEXT, stt_model TEXT,
   whisper_model TEXT, notes_channel_id TEXT,
   use_thread INTEGER, auto_join INTEGER, language TEXT, summary_language TEXT,
-  summary_prompt TEXT
+  summary_prompt TEXT, overview_prompt TEXT
 );
 CREATE TABLE IF NOT EXISTS guilds (
   guild_id TEXT PRIMARY KEY,
@@ -85,6 +85,9 @@ export function openDb(path) {
   }
   if (!cols.some((c) => c.name === 'summary_prompt')) {
     sql.exec(`ALTER TABLE guild_config ADD COLUMN summary_prompt TEXT`);
+  }
+  if (!cols.some((c) => c.name === 'overview_prompt')) {
+    sql.exec(`ALTER TABLE guild_config ADD COLUMN overview_prompt TEXT`);
   }
   // Migration: add cloud STT columns to dbs created before they existed.
   if (!cols.some((c) => c.name === 'stt_provider')) {

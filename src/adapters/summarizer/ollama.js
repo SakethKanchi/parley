@@ -6,6 +6,9 @@ import { config } from '../../config/env.js';
 
 const CONTEXT_TOKENS = 8192;
 const TRANSCRIPT_CHUNK_SIZE = 6500;
+const OVERVIEW_GROUP_SIZE = 8;
+export const DEFAULT_OVERVIEW_PROMPT = 'Write a 2–4 sentence overview using only the chronological summaries below.';
+const overviewSentences = new Intl.Segmenter(undefined, { granularity: 'sentence' });
 
 function splitTranscript(transcript) {
   const chunks = [];
@@ -34,6 +37,15 @@ function uniqueBy(items, key) {
   return [...unique.values()];
 }
 
+function conciseOverview(text, maxSentences) {
+  const sentences = Array.from(overviewSentences.segment(text), ({ segment }) => segment.trim())
+    .filter((sentence) => /[.!?…]["'»”’)]*$/.test(sentence));
+  const unique = uniqueBy(sentences, noteKey);
+  return (unique.length > maxSentences
+    ? [...unique.slice(0, maxSentences - 1), unique.at(-1)]
+    : unique).join(' ');
+}
+
 function combineNotes(parts, tldr) {
   const topics = new Map();
   for (const { title, points } of parts.flatMap((part) => part.topics)) {
@@ -52,8 +64,9 @@ function combineNotes(parts, tldr) {
 }
 
 export class OllamaSummarizer {
-  constructor(model, url = config.ollama.url, fetchImpl = fetch) {
+  constructor(model, url = config.ollama.url, fetchImpl = fetch, { overviewPrompt } = {}) {
     this.model = model; this.url = url; this.fetchImpl = fetchImpl;
+    this.overviewPrompt = overviewPrompt ?? DEFAULT_OVERVIEW_PROMPT;
   }
 
   async chat(prompt, settings = {}) {
@@ -94,30 +107,33 @@ export class OllamaSummarizer {
   }
 
   async combineOverviews(parts, meta) {
-    const format = {
-      type: 'object',
-      properties: { tldr: { type: 'string' } },
-      required: ['tldr'],
-    };
     let overviews = parts.map((part) => part.tldr.trim()).filter(Boolean);
     const language = summaryLanguageInstruction(meta.summaryLanguage);
     while (overviews.length > 1) {
+      const finalPass = overviews.length <= OVERVIEW_GROUP_SIZE;
+      const extended = finalPass && this.overviewPrompt !== DEFAULT_OVERVIEW_PROMPT;
+      const maxSentences = extended ? 8 : 4;
+      const stage = finalPass ? 'This is the final overview.' : 'This is an intermediate overview.';
       const merged = [];
-      for (let start = 0; start < overviews.length; start += 8) {
-        const group = overviews.slice(start, start + 8);
+      for (let start = 0; start < overviews.length; start += OVERVIEW_GROUP_SIZE) {
+        const group = overviews.slice(start, start + OVERVIEW_GROUP_SIZE);
         if (group.length === 1) {
           merged.push(group[0]);
           continue;
         }
         const input = group.map((overview) => overview.slice(0, 600)).join('\n');
-        const prompt = `Write a 2–4 sentence overview using only the chronological summaries below.${language}\n\n${input}`;
+        const prompt = `${this.overviewPrompt}${language}\n\n${stage} Return only one plain-text paragraph, at most ${maxSentences} sentences, without a title or JSON.\n\n${input}`;
         try {
-          const overview = await this.structuredResponse(prompt, format, 450);
-          if (typeof overview?.tldr !== 'string' || !overview.tldr.trim()) throw new Error('Empty overview');
-          merged.push(overview.tldr);
+          const reply = await this.chat(prompt, {
+            options: { num_ctx: CONTEXT_TOKENS, num_predict: extended ? 650 : 360, temperature: 0.1 },
+          });
+          const text = reply.message?.content?.trim() ?? '';
+          const overview = conciseOverview(text, maxSentences) || (reply.done_reason === 'stop' ? text : '');
+          if (!overview) throw new Error('Empty overview');
+          merged.push(overview);
         } catch {
           // The detailed notes can still be saved when overview generation fails.
-          merged.push(group.map((overview) => overview.slice(0, 150)).join(' '));
+          merged.push(conciseOverview(group.join(' '), maxSentences) || group[0]);
         }
       }
       overviews = merged;

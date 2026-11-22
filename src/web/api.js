@@ -11,6 +11,7 @@ import { getSummarizer } from '../adapters/summarizer/index.js';
 import { buildTranscript, computeTalkTime } from '../pipeline/summarize.js';
 import { resolveSummaryLanguage } from '../adapters/summarizer/languages.js';
 import { SUMMARY_PROMPT } from '../adapters/summarizer/notes.js';
+import { DEFAULT_OVERVIEW_PROMPT } from '../adapters/summarizer/ollama.js';
 import { listModels, clearModelCache, DEFAULT_MODELS, CATALOG_PROVIDERS } from '../adapters/summarizer/models.js';
 import { secretStatus, setProviderKey, isSecretProvider, connectionStatus, setConnection } from '../store/secrets.js';
 import { COMMAND_CATALOG } from '../commands/definitions.js';
@@ -270,6 +271,7 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
     res.json({
       config: getGuildConfig(db, req.params.g),
       defaultSummaryPrompt: SUMMARY_PROMPT,
+      defaultOverviewPrompt: DEFAULT_OVERVIEW_PROMPT,
       providers: availableProviders(env),
       sttProviders: availableSttProviders(env),
       channels,

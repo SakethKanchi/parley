@@ -131,6 +131,28 @@ test('GET config returns providers + PATCH validates', async () => {
   } finally { close(); }
 });
 
+test('Overview prompt can be saved, validated and restored per server', async () => {
+  const db = openDb(':memory:');
+  const { base, close } = await listen(appWith(db));
+  const url = `${base}/api/guilds/g1/config`;
+  const get = async () => (await fetch(url)).json();
+  const save = (overviewPrompt) => fetch(url, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ overviewPrompt }),
+  });
+  try {
+    const defaults = await get();
+    assert.match(defaults.defaultOverviewPrompt, /chronological summaries/);
+    assert.equal(defaults.config.overviewPrompt, null);
+    assert.equal((await save('  Focus on the ending.  ')).status, 200);
+    assert.equal((await get()).config.overviewPrompt, 'Focus on the ending.');
+    assert.equal((await save('x'.repeat(2001))).status, 400);
+    assert.equal((await save(' ')).status, 400);
+    assert.equal((await save(null)).status, 200);
+    assert.equal((await get()).config.overviewPrompt, null);
+  } finally { close(); }
+});
+
 test('GET provider models returns a catalog and rejects unknown providers', async () => {
   const db = openDb(':memory:');
   const { base, close } = await listen(appWith(db));

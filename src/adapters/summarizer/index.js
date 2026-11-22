@@ -8,11 +8,11 @@ import { FallbackSummarizer } from './fallback.js';
 import { DEFAULT_MODELS } from './models.js';
 import { config as envConfig } from '../../config/env.js';
 
-export function createAdapter(provider, model, env = envConfig) {
+export function createAdapter(provider, model, env = envConfig, options = {}) {
   switch (provider) {
     case 'fake': return new FakeSummarizer();
     case 'gemini': return new GeminiSummarizer(model, env.gemini.apiKey);
-    case 'ollama': return new OllamaSummarizer(model, env.ollama.url);
+    case 'ollama': return new OllamaSummarizer(model, env.ollama.url, undefined, options);
     case 'openai': return new OpenAISummarizer(model, env.openai.baseUrl, env.openai.apiKey);
     case 'opencode': return new OpenCodeSummarizer(model || DEFAULT_MODELS.opencode, env.opencode.baseUrl, env.opencode.apiKey);
     case 'openrouter': return new OpenRouterSummarizer(model || DEFAULT_MODELS.openrouter, env.openrouter.baseUrl, env.openrouter.apiKey);
@@ -23,7 +23,8 @@ export function createAdapter(provider, model, env = envConfig) {
 const label = (provider, model) => `${provider}:${model || ''}`;
 
 export function getSummarizer(cfg, env = envConfig) {
-  const primary = createAdapter(cfg.summarizerProvider, cfg.summarizerModel, env);
+  const options = { overviewPrompt: cfg.overviewPrompt };
+  const primary = createAdapter(cfg.summarizerProvider, cfg.summarizerModel, env, options);
   const fbProvider = cfg.summarizerFallbackProvider;
   const fbModel = cfg.summarizerFallbackModel;
   const primaryLabel = label(cfg.summarizerProvider, cfg.summarizerModel);
@@ -31,7 +32,7 @@ export function getSummarizer(cfg, env = envConfig) {
   // No fallback configured, or it names the same provider+model as the primary
   // (retrying an identical dead endpoint buys nothing) — hand back the bare adapter.
   if (!fbProvider || fallbackLabel === primaryLabel) return primary;
-  return new FallbackSummarizer(primary, () => createAdapter(fbProvider, fbModel, env), {
+  return new FallbackSummarizer(primary, () => createAdapter(fbProvider, fbModel, env, options), {
     label: primaryLabel,
     fallbackLabel,
   });

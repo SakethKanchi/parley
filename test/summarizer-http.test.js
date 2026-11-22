@@ -32,11 +32,23 @@ test('OllamaSummarizer retries output-length failures with a compact prompt', as
 
 test('OllamaSummarizer sends every transcript chunk and merges structured notes in the chosen language', async () => {
   const requests = [];
-  const s = new OllamaSummarizer('qwen', 'http://x', async (_url, request) => {
+  const sentences = [
+    'Die Gruppe begann im Dorf.', 'Sie erreichte den Tempel.', 'Der Eingang war verriegelt.',
+    'Alex fand einen Schlüssel.', 'Die Tür öffnete sich.', 'Ein Wächter erschien.',
+    'Die Gruppe verhandelte.', 'Der Wächter brach auf.', 'Die Gruppe blieb im Tempel.',
+  ];
+  const s = getSummarizer({
+    summarizerProvider: 'ollama', summarizerModel: 'qwen',
+    overviewPrompt: 'Explain where the group left off.',
+  }, { ollama: { url: 'http://x' } });
+  s.fetchImpl = async (_url, request) => {
     const body = JSON.parse(request.body);
     requests.push(body);
-    if (body.format.required.length === 1) {
-      return okJson({ message: { content: '{"tldr":"Zusammenfassung"}' } })();
+    if (!body.format) {
+      return okJson({
+        done_reason: 'length',
+        message: { content: sentences.join(' ') + ' Ein abgeschnittener' },
+      })();
     }
     const finalChunk = body.messages[0].content.includes('LAST');
     const notes = {
@@ -46,10 +58,12 @@ test('OllamaSummarizer sends every transcript chunk and merges structured notes 
       actionItems: [{ assignee: 'Alex', task: 'Termin mitteilen' }],
     };
     return okJson({ message: { content: JSON.stringify(notes) } })();
-  });
+  };
   const input = 'FIRST' + 'a'.repeat(26000) + 'LAST';
-  assert.deepEqual(await s.summarize(input, { summaryLanguage: 'de' }), {
-    tldr: 'Zusammenfassung',
+  assert.deepEqual(await s.summarize(input, {
+    summaryLanguage: 'de', summaryPrompt: 'Extract the important facts.',
+  }), {
+    tldr: [...sentences.slice(0, 7), sentences.at(-1)].join(' '),
     topics: [{ title: 'Planung', points: ['Auftakt', 'Abschluss'] }],
     decisions: ['Termin bestätigt'], openQuestions: [],
     actionItems: [{ assignee: 'Alex', task: 'Termin mitteilen' }],
@@ -58,13 +72,32 @@ test('OllamaSummarizer sends every transcript chunk and merges structured notes 
   assert.equal(chunks.length, 5);
   assert.ok(chunks[0].messages[0].content.includes('FIRST'));
   assert.ok(chunks[4].messages[0].content.includes('LAST'));
+  assert.ok(chunks.every((request) => request.messages[0].content.includes('Extract the important facts.')));
+  assert.ok(chunks.every((request) => !request.messages[0].content.includes('Explain where the group left off.')));
   assert.equal(requests.length, 6);
-  assert.deepEqual(requests.at(-1).format.required, ['tldr']);
+  assert.equal(requests.at(-1).format, undefined);
+  assert.match(requests.at(-1).messages[0].content, /^Explain where the group left off\./);
+  assert.match(requests.at(-1).messages[0].content, /final overview.+at most 8 sentences/);
+  assert.ok(requests.at(-1).options.num_predict > 360);
   for (const request of requests) {
     assert.ok(request.messages[0].content.includes('Write the entire summary in German.'));
     assert.equal(request.options.num_ctx, 8192);
-    assert.equal(request.format.type, 'object');
   }
+  assert.ok(chunks.every((request) => request.format.type === 'object'));
+});
+
+test('Ollama keeps intermediate overviews short when the final overview is customized', async () => {
+  const requests = [];
+  const reply = 'They arrived. The gate was open. They followed the path. They met a guide. They camped.';
+  const s = new OllamaSummarizer('qwen', 'http://x', async (_url, request) => {
+    requests.push(JSON.parse(request.body));
+    return okJson({ done_reason: 'stop', message: { content: reply } })();
+  }, { overviewPrompt: 'Describe how the session ended.' });
+  const parts = Array.from({ length: 9 }, (_, index) => ({ tldr: `Event ${index} happened.` }));
+  assert.equal(await s.combineOverviews(parts, {}), reply);
+  assert.match(requests[0].messages[0].content, /intermediate overview.+at most 4 sentences/);
+  assert.match(requests[1].messages[0].content, /final overview.+at most 8 sentences/);
+  assert.doesNotMatch(requests[1].messages[0].content, /met a guide/);
 });
 
 test('OpenAISummarizer parses choices[0].message.content JSON', async () => {

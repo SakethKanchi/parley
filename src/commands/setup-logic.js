@@ -98,14 +98,21 @@ export function validateSetup(input, env) {
     patch.summaryLanguage = input.summary_language;
   }
 
-  if (input.summaryPrompt === null) {
-    patch.summaryPrompt = null; // restore the built-in prompt
-  } else if (input.summaryPrompt !== undefined) {
-    const prompt = typeof input.summaryPrompt === 'string' ? input.summaryPrompt.trim() : '';
-    if (!prompt || prompt.length > 20000) {
-      return { ok: false, error: 'Summary prompt must be non-empty text of at most 20,000 characters.' };
+  for (const [field, label, limit] of [
+    ['summaryPrompt', 'Summary prompt', 20000],
+    ['overviewPrompt', 'Overview prompt', 2000],
+  ]) {
+    const value = input[field];
+    if (value === undefined) continue;
+    if (value === null) {
+      patch[field] = null;
+      continue;
     }
-    patch.summaryPrompt = prompt;
+    const prompt = typeof value === 'string' ? value.trim() : '';
+    if (!prompt || prompt.length > limit) {
+      return { ok: false, error: `${label} must be non-empty text of at most ${limit.toLocaleString('en-US')} characters.` };
+    }
+    patch[field] = prompt;
   }
 
   return { ok: true, patch };

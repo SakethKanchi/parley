@@ -312,6 +312,8 @@ pm2 save
 
 ## 🎛️ Configuration
 
+In **Settings → Summarizer**, the **Summary prompt** instructs the model to extract structured JSON notes from the transcript. For long Ollama summaries, the **Overview prompt** controls the final recap from the chunk overviews. Ask for plain text in that field. The prompts are saved per server, and **Restore default** restores the built-in wording.
+
 `/setup` (requires the **Manage Server** permission) writes per-guild config, applied without a restart.
 
 | Option | Description |

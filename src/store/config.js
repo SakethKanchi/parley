@@ -16,6 +16,7 @@ export const DEFAULTS = {
   // null = the built-in SUMMARY_PROMPT (notes.js), resolved at summarize time so
   // prompt improvements reach every server that hasn't written its own.
   summaryPrompt: null,
+  overviewPrompt: null,
 };
 
 const COLS = {
@@ -32,6 +33,7 @@ const COLS = {
   language: 'language',
   summaryLanguage: 'summary_language',
   summaryPrompt: 'summary_prompt',
+  overviewPrompt: 'overview_prompt',
 };
 
 function fromRow(row) {
@@ -49,6 +51,7 @@ function fromRow(row) {
     language: row.language ?? DEFAULTS.language,
     summaryLanguage: row.summary_language ?? DEFAULTS.summaryLanguage,
     summaryPrompt: row.summary_prompt ?? DEFAULTS.summaryPrompt,
+    overviewPrompt: row.overview_prompt ?? DEFAULTS.overviewPrompt,
   };
 }
 
@@ -65,8 +68,8 @@ export function setGuildConfig(db, guildId, patch) {
   const merged = { ...current, ...safePatch, guildId };
   db.sql.prepare(
     `INSERT OR REPLACE INTO guild_config
-       (guild_id, summarizer_provider, summarizer_model, summarizer_fallback_provider, summarizer_fallback_model, stt_provider, stt_model, whisper_model, notes_channel_id, use_thread, auto_join, language, summary_language, summary_prompt)
-     VALUES (@guildId, @summarizerProvider, @summarizerModel, @summarizerFallbackProvider, @summarizerFallbackModel, @sttProvider, @sttModel, @whisperModel, @notesChannelId, @useThread, @autoJoin, @language, @summaryLanguage, @summaryPrompt)`
+       (guild_id, summarizer_provider, summarizer_model, summarizer_fallback_provider, summarizer_fallback_model, stt_provider, stt_model, whisper_model, notes_channel_id, use_thread, auto_join, language, summary_language, summary_prompt, overview_prompt)
+     VALUES (@guildId, @summarizerProvider, @summarizerModel, @summarizerFallbackProvider, @summarizerFallbackModel, @sttProvider, @sttModel, @whisperModel, @notesChannelId, @useThread, @autoJoin, @language, @summaryLanguage, @summaryPrompt, @overviewPrompt)`
   ).run({
     guildId,
     summarizerProvider: merged.summarizerProvider,
@@ -82,6 +85,7 @@ export function setGuildConfig(db, guildId, patch) {
     language: merged.language,
     summaryLanguage: merged.summaryLanguage,
     summaryPrompt: merged.summaryPrompt,
+    overviewPrompt: merged.overviewPrompt,
   });
   return merged;
 }

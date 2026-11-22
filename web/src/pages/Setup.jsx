@@ -72,7 +72,7 @@ function Card({ title, desc, children }) {
 }
 
 // value is the server's own prompt, or null when it uses the built-in default.
-function PromptEditor({ value, defaultValue, onSave }) {
+function PromptEditor({ label, hint, value, defaultValue, maxLength = 20000, rows = 10, onSave }) {
   const current = value ?? defaultValue;
   const [draft, setDraft] = useState(current);
   const [busy, setBusy] = useState(false);
@@ -81,15 +81,15 @@ function PromptEditor({ value, defaultValue, onSave }) {
 
   async function savePrompt(next) {
     setBusy(true);
-    const ok = await onSave({ summaryPrompt: next });
+    const ok = await onSave(next);
     if (ok) setDraft(next ?? defaultValue);
     setBusy(false);
   }
 
   return (
-    <Field label="Summary prompt" hint="Instructions sent to the summarizer before the meeting details and transcript. Keep the JSON output shape if you want structured notes and todos.">
-      <textarea className="input min-h-64 font-mono text-xs resize-y" aria-label="Summary prompt"
-        value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={20000} />
+    <Field label={label} hint={hint}>
+      <textarea className="input font-mono text-xs resize-y" aria-label={label} rows={rows}
+        value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={maxLength} />
       <div className="flex flex-wrap gap-2 mt-2">
         <button type="button" className="btn btn-primary" disabled={busy || !changed || !draft.trim()}
           onClick={() => savePrompt(draft.trim())}>Save prompt</button>
@@ -344,7 +344,7 @@ export default function Setup() {
     </Page>
   );
 
-  const { config: c, providers, sttProviders, channels, secrets = {}, defaultModels = {}, defaultSummaryPrompt } = data;
+  const { config: c, providers, sttProviders, channels, secrets = {}, defaultModels = {}, defaultSummaryPrompt, defaultOverviewPrompt } = data;
   const save = async (patch) => {
     try {
       const r = await api.saveConfig(guildId, patch);
@@ -461,7 +461,15 @@ export default function Setup() {
             )}
           </Field>
           )}
-          <PromptEditor key={guildId} value={c.summaryPrompt} defaultValue={defaultSummaryPrompt} onSave={save} />
+          <PromptEditor key={guildId} label="Summary prompt" value={c.summaryPrompt}
+            hint="Instructions for the transcript. Keep the JSON output shape for structured notes and todos."
+            defaultValue={defaultSummaryPrompt} onSave={(summaryPrompt) => save({ summaryPrompt })} />
+          {(c.summarizerProvider === 'ollama' || c.summarizerFallbackProvider === 'ollama') && (
+            <PromptEditor key={`overview-${guildId}`} label="Overview prompt" value={c.overviewPrompt}
+              hint="Instructions for the final recap of a long Ollama summary. Ask for plain text."
+              defaultValue={defaultOverviewPrompt} maxLength={2000} rows={4}
+              onSave={(overviewPrompt) => save({ overviewPrompt })} />
+          )}
         </Card>
 
         <Card title="Transcription" desc="How spoken audio becomes text.">

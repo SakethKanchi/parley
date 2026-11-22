@@ -85,7 +85,7 @@ export function startBot({ db, audioRoot }) {
     return channel.members.filter((m) => !m.user.bot).size;
   }
   function setRecIndicator(guild, on) {
-    guild.members.me?.setNickname(on ? '[REC] Meeting Bot' : null).catch((e) => {
+    guild.members.me?.setNickname(on ? config.recordingNickname : null).catch((e) => {
       console.warn('Nickname change failed:', e.message);
     });
   }

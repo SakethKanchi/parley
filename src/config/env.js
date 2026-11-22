@@ -13,6 +13,14 @@ export function resolveDataDir(env = process.env, exists = existsSync, cwd = pro
 export function resolveEnvFile(env = process.env) {
   return env.PARLEY_ENV_FILE || join(resolveDataDir(env), '.env');
 }
+
+export function resolveRecordingNickname(env = process.env) {
+  const nickname = env.DISCORD_RECORDING_NICKNAME?.trim();
+  if (nickname && Array.from(nickname).length <= 32 && !/[\u0000-\u001f\u007f]/.test(nickname)) {
+    return nickname;
+  }
+  return '[REC] Meeting Bot';
+}
 // Load the cwd .env first (back-compat / `node --env-file`), then overlay the
 // persistent DATA_DIR/.env so values saved from the web UI win.
 dotenv.config({ override: true });
@@ -33,6 +41,7 @@ export const config = {
   dataDir: resolveDataDir(),
   discordToken: process.env.DISCORD_TOKEN,
   discordClientId: process.env.DISCORD_CLIENT_ID,
+  recordingNickname: resolveRecordingNickname(),
   sttUrl: process.env.STT_URL || 'http://127.0.0.1:8000',
   gemini: { apiKey: process.env.GEMINI_API_KEY },
   openai: { apiKey: process.env.OPENAI_API_KEY, baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1' },

@@ -116,7 +116,7 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 - **Self-host in one command.** `docker compose up -d` runs the bot, the whisper sidecar, and the dashboard together. No public IP or port forwarding needed.
 - **Searchable history.** `/history`, `/summary`, `/raw`, and full-text `/search` over every past meeting, backed by SQLite FTS5.
 - **Resilient.** A failed track doesn't sink the meeting (per-track error tolerance), the bot recovers from voice disconnects, and failed transcriptions or summaries are retryable with one click from the dashboard (or the CLI).
-- **Auto join/leave.** Joins when 2+ people are talking, leaves when the room empties. Shows `[REC]` in its nickname while recording.
+- **Auto join/leave.** Joins when 2+ people are talking, leaves when the room empties. By default the nickname shows `[REC]` while recording.
 - **Concurrent meetings.** Records multiple channels/servers at once — no global single-recording limit.
 
 ## ⚙️ How it works
@@ -312,6 +312,8 @@ pm2 save
 
 ## 🎛️ Configuration
 
+Set `DISCORD_RECORDING_NICKNAME` in your environment to customize the bot's nickname while recording. The default is `[REC] Meeting Bot`, and custom nicknames can be up to 32 characters. For example, use `DISCORD_RECORDING_NICKNAME="[REC] Notes Bot"` to keep the recording indicator with a different name.
+
 `/setup` (requires the **Manage Server** permission) writes per-guild config, applied without a restart.
 
 | Option | Description |
@@ -354,7 +356,7 @@ Every backend returns the same `{ text, words }` shape with word-level timestamp
 
 ## 🔒 Privacy & consent
 
-- The bot shows `[REC]` in its nickname whenever a recording is active, so every member can see it.
+- By default the bot shows `[REC]` in its nickname whenever a recording is active, so every member can see it.
 - With the default local sidecar, audio is transcribed **on the machine running the bot** — no audio leaves your network, and with Ollama as the summarizer nothing does at all. If you choose a **cloud** transcription provider (OpenAI), meeting audio is sent to that provider for transcription; only the final transcript text is sent to your chosen summarizer.
 - Recording people's voices is subject to consent laws that vary by jurisdiction (some require all-party consent). **You are responsible for obtaining consent from all participants.**
 

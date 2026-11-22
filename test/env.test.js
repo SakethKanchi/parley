@@ -1,6 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveDataDir, validateEnv } from '../src/config/env.js';
+import { resolveDataDir, resolveRecordingNickname, validateEnv } from '../src/config/env.js';
+
+test('recording nickname defaults to the existing recording indicator', () => {
+  assert.equal(resolveRecordingNickname({}), '[REC] Meeting Bot');
+  assert.equal(resolveRecordingNickname({ DISCORD_RECORDING_NICKNAME: '   ' }), '[REC] Meeting Bot');
+});
+
+test('recording nickname accepts a custom fallback-safe value', () => {
+  assert.equal(resolveRecordingNickname({ DISCORD_RECORDING_NICKNAME: ' [REC] Notes Bot ' }), '[REC] Notes Bot');
+  assert.equal(resolveRecordingNickname({ DISCORD_RECORDING_NICKNAME: 'x'.repeat(33) }), '[REC] Meeting Bot');
+  assert.equal(resolveRecordingNickname({ DISCORD_RECORDING_NICKNAME: 'Notes\nBot' }), '[REC] Meeting Bot');
+});
 
 test('resolveDataDir prefers explicit DATA_DIR', () => {
   assert.equal(resolveDataDir({ DATA_DIR: '/tmp/x' }, () => false), '/tmp/x');

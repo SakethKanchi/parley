@@ -21,6 +21,36 @@ function splitTranscript(transcript) {
   return chunks;
 }
 
+function noteKey(value) {
+  return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function uniqueBy(items, key) {
+  const unique = new Map();
+  for (const item of items) {
+    const id = key(item);
+    if (!unique.has(id)) unique.set(id, item);
+  }
+  return [...unique.values()];
+}
+
+function combineNotes(parts, tldr) {
+  const topics = new Map();
+  for (const { title, points } of parts.flatMap((part) => part.topics)) {
+    const key = noteKey(title);
+    if (!topics.has(key)) topics.set(key, { title, points: [] });
+    topics.get(key).points.push(...points);
+  }
+  return {
+    tldr,
+    topics: [...topics.values()].map(({ title, points }) => ({ title, points: uniqueBy(points, noteKey) })),
+    decisions: uniqueBy(parts.flatMap((part) => part.decisions), noteKey),
+    openQuestions: uniqueBy(parts.flatMap((part) => part.openQuestions), noteKey),
+    actionItems: uniqueBy(parts.flatMap((part) => part.actionItems), ({ assignee, task }) =>
+      JSON.stringify([noteKey(assignee || ''), noteKey(task)])),
+  };
+}
+
 export class OllamaSummarizer {
   constructor(model, url = config.ollama.url, fetchImpl = fetch) {
     this.model = model; this.url = url; this.fetchImpl = fetchImpl;
@@ -38,9 +68,9 @@ export class OllamaSummarizer {
     });
   }
 
-  async structuredNotes(prompt, numPredict) {
+  async structuredResponse(prompt, format, numPredict) {
     const request = (input, limit) => this.chat(input, {
-      format: NOTES_SCHEMA,
+      format,
       options: { num_ctx: CONTEXT_TOKENS, num_predict: limit, temperature: 0.1 },
     });
     let body = await request(prompt, numPredict);
@@ -51,12 +81,48 @@ export class OllamaSummarizer {
       );
     }
     if (body.done_reason === 'length') throw new Error('Ollama reached its output limit while generating meeting notes.');
-    const notes = JSON.parse(body.message?.content ?? '');
+    return JSON.parse(body.message?.content ?? '');
+  }
+
+  async structuredNotes(prompt, numPredict) {
+    const notes = await this.structuredResponse(prompt, NOTES_SCHEMA, numPredict);
     if (typeof notes?.tldr !== 'string' ||
         !['topics', 'decisions', 'openQuestions', 'actionItems'].every((key) => Array.isArray(notes[key]))) {
       throw new Error('Ollama returned an incomplete meeting notes object.');
     }
     return normalizeNotes(notes);
+  }
+
+  async combineOverviews(parts, meta) {
+    const format = {
+      type: 'object',
+      properties: { tldr: { type: 'string' } },
+      required: ['tldr'],
+    };
+    let overviews = parts.map((part) => part.tldr.trim()).filter(Boolean);
+    const language = summaryLanguageInstruction(meta.summaryLanguage);
+    while (overviews.length > 1) {
+      const merged = [];
+      for (let start = 0; start < overviews.length; start += 8) {
+        const group = overviews.slice(start, start + 8);
+        if (group.length === 1) {
+          merged.push(group[0]);
+          continue;
+        }
+        const input = group.map((overview) => overview.slice(0, 600)).join('\n');
+        const prompt = `Write a 2–4 sentence overview using only the chronological summaries below.${language}\n\n${input}`;
+        try {
+          const overview = await this.structuredResponse(prompt, format, 450);
+          if (typeof overview?.tldr !== 'string' || !overview.tldr.trim()) throw new Error('Empty overview');
+          merged.push(overview.tldr);
+        } catch {
+          // The detailed notes can still be saved when overview generation fails.
+          merged.push(group.map((overview) => overview.slice(0, 150)).join(' '));
+        }
+      }
+      overviews = merged;
+    }
+    return overviews[0] ?? '';
   }
 
   async summarize(transcript, meta) {
@@ -65,9 +131,10 @@ export class OllamaSummarizer {
       return this.structuredNotes(`${instructions}\n\nTranscript:\n${transcript}`, 1800);
     }
 
-    // Keep the transcript and intermediate notes comfortably inside the context window.
+    // Keep each request inside the context window and retain the detailed notes
+    // from every excerpt without asking the model to generate them a second time.
     const chunks = splitTranscript(transcript);
-    let parts = [];
+    const parts = [];
     const concise = 'Keep each point short and use at most 3 topics, 3 decisions, 3 open questions, and 4 action items for this section.';
     for (const [index, chunk] of chunks.entries()) {
       parts.push(await this.structuredNotes(
@@ -75,20 +142,7 @@ export class OllamaSummarizer {
         1000,
       ));
     }
-    const mergePrompt = (group, guidance) =>
-      `${instructions}\n\nConsolidate these chronological notes. Use only the supplied notes, combine duplicates and keep explicit decisions, open questions, and assignees. ${guidance}\n\nNotes:\n${JSON.stringify(group)}`;
-    while (parts.length > 3) {
-      const merged = [];
-      for (let start = 0; start < parts.length; start += 3) {
-        const group = parts.slice(start, start + 3);
-        merged.push(group.length === 1 ? group[0] : await this.structuredNotes(
-          mergePrompt(group, 'Cover distinct topics briefly. Use up to 5 topics, 4 decisions, 4 open questions, and 6 action items. One short sentence per point.'),
-          1100,
-        ));
-      }
-      parts = merged;
-    }
-    return this.structuredNotes(mergePrompt(parts, 'Write the final notes covering the whole meeting.'), 2200);
+    return combineNotes(parts, await this.combineOverviews(parts, meta));
   }
 
   async ask(prompt) {

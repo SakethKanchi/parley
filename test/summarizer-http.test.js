@@ -32,19 +32,34 @@ test('OllamaSummarizer retries output-length failures with a compact prompt', as
 
 test('OllamaSummarizer sends every transcript chunk and merges structured notes in the chosen language', async () => {
   const requests = [];
-  const notes = { tldr: 'Zusammenfassung', topics: [], decisions: [], openQuestions: [], actionItems: [] };
   const s = new OllamaSummarizer('qwen', 'http://x', async (_url, request) => {
-    requests.push(JSON.parse(request.body));
+    const body = JSON.parse(request.body);
+    requests.push(body);
+    if (body.format.required.length === 1) {
+      return okJson({ message: { content: '{"tldr":"Zusammenfassung"}' } })();
+    }
+    const finalChunk = body.messages[0].content.includes('LAST');
+    const notes = {
+      tldr: 'Teilergebnis',
+      topics: [{ title: finalChunk ? ' PLANUNG ' : 'Planung', points: [finalChunk ? 'Abschluss' : 'Auftakt'] }],
+      decisions: ['Termin bestätigt'], openQuestions: [],
+      actionItems: [{ assignee: 'Alex', task: 'Termin mitteilen' }],
+    };
     return okJson({ message: { content: JSON.stringify(notes) } })();
   });
   const input = 'FIRST' + 'a'.repeat(26000) + 'LAST';
-  assert.deepEqual(await s.summarize(input, { summaryLanguage: 'de' }), notes);
+  assert.deepEqual(await s.summarize(input, { summaryLanguage: 'de' }), {
+    tldr: 'Zusammenfassung',
+    topics: [{ title: 'Planung', points: ['Auftakt', 'Abschluss'] }],
+    decisions: ['Termin bestätigt'], openQuestions: [],
+    actionItems: [{ assignee: 'Alex', task: 'Termin mitteilen' }],
+  });
   const chunks = requests.filter((request) => request.messages[0].content.includes('Transcript part '));
   assert.equal(chunks.length, 5);
   assert.ok(chunks[0].messages[0].content.includes('FIRST'));
   assert.ok(chunks[4].messages[0].content.includes('LAST'));
-  assert.equal(requests.length, 8);
-  assert.ok(requests.at(-1).messages[0].content.includes('final notes'));
+  assert.equal(requests.length, 6);
+  assert.deepEqual(requests.at(-1).format.required, ['tldr']);
   for (const request of requests) {
     assert.ok(request.messages[0].content.includes('Write the entire summary in German.'));
     assert.equal(request.options.num_ctx, 8192);

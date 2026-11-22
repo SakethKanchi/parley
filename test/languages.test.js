@@ -9,22 +9,23 @@ import {
 } from '../src/adapters/summarizer/languages.js';
 
 test('LANGUAGES is list B with code+name', () => {
-  assert.equal(LANGUAGES.length, 10);
+  assert.equal(LANGUAGES.length, 11);
   assert.deepEqual(LANGUAGES.find((l) => l.code === 'de'), { code: 'de', name: 'German' });
 });
 
-test('LANGUAGE_CODES = 10 langs + auto (transcription set)', () => {
+test('LANGUAGE_CODES = 11 languages + auto (transcription set)', () => {
   assert.equal(LANGUAGE_CODES.has('de'), true);
+  assert.equal(LANGUAGE_CODES.has('pl'), true);
   assert.equal(LANGUAGE_CODES.has('auto'), true);
   assert.equal(LANGUAGE_CODES.has('match'), false);
-  assert.equal(LANGUAGE_CODES.size, 11);
+  assert.equal(LANGUAGE_CODES.size, 12);
 });
 
-test('SUMMARY_LANGUAGE_VALUES = 10 langs + match (no auto)', () => {
+test('SUMMARY_LANGUAGE_VALUES = 11 languages + match (no auto)', () => {
   assert.equal(SUMMARY_LANGUAGE_VALUES.has('en'), true);
   assert.equal(SUMMARY_LANGUAGE_VALUES.has('match'), true);
   assert.equal(SUMMARY_LANGUAGE_VALUES.has('auto'), false);
-  assert.equal(SUMMARY_LANGUAGE_VALUES.size, 11);
+  assert.equal(SUMMARY_LANGUAGE_VALUES.size, 12);
 });
 
 test('resolveSummaryLanguage defaults to en when unset', () => {
@@ -45,6 +46,7 @@ test('resolveSummaryLanguage match + auto transcription yields auto', () => {
 
 test('instruction names the language for a fixed code', () => {
   assert.match(summaryLanguageInstruction('de'), /Write the entire summary in German\./);
+  assert.match(summaryLanguageInstruction('pl'), /Write the entire summary in Polish\./);
 });
 
 test('instruction for auto says same language as transcript', () => {

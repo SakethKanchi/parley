@@ -7,6 +7,7 @@ export const LANGUAGES = [
   { code: 'fr', name: 'French' },
   { code: 'it', name: 'Italian' },
   { code: 'pt', name: 'Portuguese' },
+  { code: 'pl', name: 'Polish' },
   { code: 'nl', name: 'Dutch' },
   { code: 'ru', name: 'Russian' },
   { code: 'ja', name: 'Japanese' },
@@ -15,10 +16,10 @@ export const LANGUAGES = [
 
 const CODE_TO_NAME = Object.fromEntries(LANGUAGES.map((l) => [l.code, l.name]));
 
-// Transcription accepts the 10 langs + 'auto' (Whisper auto-detect).
+// Transcription accepts the listed languages + 'auto' (Whisper auto-detect).
 export const LANGUAGE_CODES = new Set([...LANGUAGES.map((l) => l.code), 'auto']);
 
-// Summary accepts the 10 langs + 'match' (follow the transcription language).
+// Summary accepts the listed languages + 'match' (follow the transcription language).
 export const SUMMARY_LANGUAGE_VALUES = new Set([...LANGUAGES.map((l) => l.code), 'match']);
 
 // Resolve the effective summary language code. 'match' follows the guild's

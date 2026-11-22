@@ -10,10 +10,46 @@ import { DEFAULT_MODELS } from '../src/adapters/summarizer/models.js';
 const okJson = (body) => async () => ({ ok: true, status: 200, json: async () => body });
 
 test('OllamaSummarizer parses message content JSON', async () => {
-  const fetchImpl = okJson({ message: { content: '{"tldr":"o","actionItems":[]}' } });
+  const fetchImpl = okJson({ message: { content: '{"tldr":"o","topics":[],"decisions":[],"openQuestions":[],"actionItems":[]}' } });
   const s = new OllamaSummarizer('qwen', 'http://x', fetchImpl);
   const out = await s.summarize('t', { attendees: [] });
   assert.equal(out.tldr, 'o');
+});
+
+test('OllamaSummarizer retries output-length failures with a compact prompt', async () => {
+  const requests = [];
+  const notes = { tldr: 'Summary', topics: [], decisions: [], openQuestions: [], actionItems: [] };
+  const s = new OllamaSummarizer('qwen', 'http://x', async (_url, request) => {
+    requests.push(JSON.parse(request.body));
+    return requests.length === 1
+      ? okJson({ done_reason: 'length', message: { content: '{"tldr":' } })()
+      : okJson({ done_reason: 'stop', message: { content: JSON.stringify(notes) } })();
+  });
+  assert.deepEqual(await s.summarize('Transcript', {}), notes);
+  assert.ok(requests[1].options.num_predict > requests[0].options.num_predict);
+  assert.match(requests[1].messages[0].content, /return a complete JSON object/i);
+});
+
+test('OllamaSummarizer sends every transcript chunk and merges structured notes in the chosen language', async () => {
+  const requests = [];
+  const notes = { tldr: 'Zusammenfassung', topics: [], decisions: [], openQuestions: [], actionItems: [] };
+  const s = new OllamaSummarizer('qwen', 'http://x', async (_url, request) => {
+    requests.push(JSON.parse(request.body));
+    return okJson({ message: { content: JSON.stringify(notes) } })();
+  });
+  const input = 'FIRST' + 'a'.repeat(26000) + 'LAST';
+  assert.deepEqual(await s.summarize(input, { summaryLanguage: 'de' }), notes);
+  const chunks = requests.filter((request) => request.messages[0].content.includes('Transcript part '));
+  assert.equal(chunks.length, 5);
+  assert.ok(chunks[0].messages[0].content.includes('FIRST'));
+  assert.ok(chunks[4].messages[0].content.includes('LAST'));
+  assert.equal(requests.length, 8);
+  assert.ok(requests.at(-1).messages[0].content.includes('final notes'));
+  for (const request of requests) {
+    assert.ok(request.messages[0].content.includes('Write the entire summary in German.'));
+    assert.equal(request.options.num_ctx, 8192);
+    assert.equal(request.format.type, 'object');
+  }
 });
 
 test('OpenAISummarizer parses choices[0].message.content JSON', async () => {

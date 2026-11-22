@@ -4,7 +4,7 @@ import { summaryLanguageInstruction } from './languages.js';
 import { withRetry } from './errors.js';
 import { config } from '../../config/env.js';
 
-const NOTES_SCHEMA = {
+export const NOTES_SCHEMA = {
   type: SchemaType.OBJECT,
   properties: {
     tldr: { type: SchemaType.STRING },

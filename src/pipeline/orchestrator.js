@@ -10,6 +10,7 @@ export async function processMeeting(db, meetingId, opts) {
   const summarizer = opts.summarizer || getSummarizer(opts.cfg);
 
   db.setMeetingStatus(meetingId, 'processing');
+  db.setPipelineStage(meetingId, 'transcribing');
 
   let utterances;
   let failures = [];
@@ -28,6 +29,7 @@ export async function processMeeting(db, meetingId, opts) {
   } catch (err) {
     db.setTranscriptionComplete(meetingId, false);
     db.setMeetingStatus(meetingId, 'transcription_failed');
+    db.setPipelineStage(meetingId, 'transcribing', err.message || String(err));
     err.userMessage = `Transcription failed — the STT sidecar may be down or unreachable. (${err.message})`;
     throw err;
   }
@@ -42,6 +44,7 @@ export async function processMeeting(db, meetingId, opts) {
   if (utterances.length === 0 && failures.length > 0) {
     db.setTranscriptionComplete(meetingId, false);
     db.setMeetingStatus(meetingId, 'transcription_failed');
+    db.setPipelineStage(meetingId, 'transcribing', 'All tracks failed transcription');
     const err = new Error(`All ${failures.length} track(s) failed transcription`);
     err.userMessage = `Transcription failed — the STT sidecar may be down or unreachable. (${err.message})`;
     throw err;
@@ -50,15 +53,20 @@ export async function processMeeting(db, meetingId, opts) {
     db.replaceUtterances(meetingId, utterances, { complete: failures.length === 0 });
   } catch (err) {
     db.setMeetingStatus(meetingId, 'transcription_failed');
+    db.setPipelineStage(meetingId, 'transcribing', err.message || String(err));
     err.userMessage = `Transcription could not be saved safely. (${err.message})`;
     throw err;
   }
+  db.setPipelineStage(meetingId, 'transcribed');
 
   // Nobody actually spoke (bot joined an empty/near-silent channel). Don't
   // summarize or deliver — signal the caller to discard the meeting so these
   // empties never clutter the archive.
   if (utterances.length === 0) {
+    db.clearSummary(meetingId);
     db.setMeetingStatus(meetingId, 'empty');
+    db.setPipelineStage(meetingId, 'completed');
+    db.setDeliveryStatus(meetingId, false, null);
     return { notes: null, talktime: [], empty: true };
   }
 
@@ -75,10 +83,12 @@ export async function processMeeting(db, meetingId, opts) {
 
   let notes;
   const summarizeStart = Date.now();
+  db.setPipelineStage(meetingId, 'summarizing');
   try {
     notes = await summarizer.summarize(transcript, meta);
   } catch (err) {
     db.setMeetingStatus(meetingId, 'summary_failed');
+    db.setPipelineStage(meetingId, 'summarizing', err.message || String(err));
     // FallbackSummarizer already composed a message naming both attempts; don't
     // overwrite it with one that only mentions the primary provider.
     err.userMessage ??= describeSummarizerError(err, opts.cfg.summarizerProvider);
@@ -92,6 +102,7 @@ export async function processMeeting(db, meetingId, opts) {
   // summarizer.lastUsed is set by FallbackSummarizer to whichever provider
   // actually produced these notes; plain adapters leave it undefined.
   const modelUsed = summarizer.lastUsed ?? `${opts.cfg.summarizerProvider}:${opts.cfg.summarizerModel || ''}`;
+  db.clearSummary(meetingId);
   db.saveSummary(meetingId, notes, talktime, modelUsed, new Date().toISOString(), timings);
   // Seed createdAt from the MEETING date, not now(): a pipeline that runs long
   // (long transcription queue) would otherwise stamp today onto a meeting that
@@ -100,6 +111,7 @@ export async function processMeeting(db, meetingId, opts) {
   // for backfilled rows.)
   db.seedTodos(meetingId, meeting.guild_id, notes.actionItems || [], meeting.started_at);
   db.setMeetingStatus(meetingId, 'done', new Date().toISOString());
+  db.setPipelineStage(meetingId, 'summarized');
 
   // Delivery is the last step and runs AFTER the summary is safely persisted, so
   // a posting failure (missing perms, deleted channel) must not throw away a
@@ -109,13 +121,21 @@ export async function processMeeting(db, meetingId, opts) {
   let delivered = false;
   let deliveryError = null;
   if (opts.deliver) {
+    db.setPipelineStage(meetingId, 'delivering');
     try {
       await opts.deliver(notes, talktime, meta);
       delivered = true;
+      db.setDeliveryStatus(meetingId, true, null);
+      db.setPipelineStage(meetingId, 'completed');
     } catch (err) {
       deliveryError = err.message || String(err);
+      db.setDeliveryStatus(meetingId, false, deliveryError);
+      db.setPipelineStage(meetingId, 'delivering', deliveryError);
       console.error(`[pipeline] meeting ${meetingId} summarized but delivery failed: ${deliveryError}`);
     }
+  } else {
+    db.setDeliveryStatus(meetingId, false, null);
+    db.setPipelineStage(meetingId, 'completed');
   }
   return { notes, talktime, delivered, deliveryError };
 }

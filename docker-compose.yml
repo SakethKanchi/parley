@@ -13,6 +13,8 @@ services:
     image: parley-sidecar
     restart: unless-stopped
     environment:
+      # STT provider: 'whisper' (default, faster) or 'qwen' (more accurate)
+      STT_PROVIDER: whisper
       # Pin the whisper size here; the bot also passes a per-guild model.
       STT_HOST: 0.0.0.0
       STT_PORT: "8000"
@@ -53,6 +55,8 @@ services:
     environment:
       # Reach the sidecar by its compose service name, not localhost.
       STT_URL: http://sidecar:8000
+      # Reach Ollama by its compose service name.
+      OLLAMA_URL: http://ollama:11434
       DATA_DIR: /data
       WEB_UI: "1"
       WEB_UI_PORT: "3000"
@@ -64,6 +68,28 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    expose:
+      - "11434"
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - open-webui:/app/backend/data
+    ports:
+      - "127.0.0.1:3001:8080"
+
 volumes:
   parley-data:
   whisper-models:
+  ollama-data:
+  open-webui:

@@ -183,6 +183,10 @@ test('processMeeting keeps a meeting done when delivery fails (notes still saved
   assert.ok(db.getSummary(id));
   assert.equal(delivered, false);
   assert.match(deliveryError, /missing permissions/);
+  const meeting = db.getMeeting(id);
+  assert.equal(meeting.pipeline_stage, 'delivering');
+  assert.equal(meeting.delivered, 0);
+  assert.match(meeting.delivery_error, /missing permissions/);
 });
 
 test('processMeeting reports delivered:true on a successful post', async () => {
@@ -196,4 +200,8 @@ test('processMeeting reports delivered:true on a successful post', async () => {
   });
   assert.equal(delivered, true);
   assert.equal(deliveryError, null);
+  const meeting = db.getMeeting(id);
+  assert.equal(meeting.pipeline_stage, 'completed');
+  assert.equal(meeting.delivered, 1);
+  assert.equal(meeting.delivery_error, null);
 });

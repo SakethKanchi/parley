@@ -1,9 +1,16 @@
 faster-whisper>=1.1.0
+# faster-whisper's audio decoder currently passes metadata_errors to av.open;
+# PyAV 19 removed support for that argument.
+av>=11,<19
 fastapi>=0.115.0
 uvicorn>=0.32.0
 python-multipart>=0.0.12
 pytest>=8.0.0
 httpx>=0.27.0
+transformers>=4.30.0
+torch>=2.0.0
+torchaudio>=2.0.0
+librosa>=0.10.0
 # GPU (optional but tiny risk): loader-path handled in server.py
 nvidia-cublas-cu12
 nvidia-cudnn-cu12

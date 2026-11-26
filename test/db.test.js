@@ -84,6 +84,19 @@ test('setMeetingStatus + listRecent', () => {
   assert.equal(recent[0].status, 'done');
 });
 
+test('pipeline stage and delivery status are persisted', () => {
+  const db = freshDb();
+  const id = db.createMeeting({ guildId: 'g', channelId: 'c', channelName: 'x', startedAt: 't' });
+  assert.equal(db.getMeeting(id).pipeline_stage, 'captured');
+  db.setPipelineStage(id, 'delivering', 'missing permissions');
+  db.setDeliveryStatus(id, false, 'missing permissions');
+  const meeting = db.getMeeting(id);
+  assert.equal(meeting.pipeline_stage, 'delivering');
+  assert.equal(meeting.stage_error, 'missing permissions');
+  assert.equal(meeting.delivered, 0);
+  assert.equal(meeting.delivery_error, 'missing permissions');
+});
+
 test('findOrphanedMeetings returns recording/processing', () => {
   const db = freshDb();
   const a = db.createMeeting({ guildId: 'g', channelId: 'c', channelName: 'x', startedAt: 't' });

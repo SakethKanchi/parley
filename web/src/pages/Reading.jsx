@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useGuild } from '../GuildContext.jsx';
+import { useAuth } from '../AuthContext.jsx';
 import { Avatar, AvatarStack, Icon, Empty, TalkBar } from '../components/ui.jsx';
 import { fmtDateLong, fmtTime, fmtDuration, fmtClock, fmtMs, colorOf } from '../lib/format.js';
 import { useDismissable } from '../hooks/useDismissable.js';
@@ -23,11 +24,11 @@ const STATUS_COPY = {
   },
 };
 
-function RetryBanner({ meeting, retry, onDone }) {
+function RetryBanner({ meeting, retry, retranscribe, isAdmin, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const copy = STATUS_COPY[meeting.status] || { title: 'Needs attention', body: `Status: ${meeting.status}.` };
-  const canRetry = retry?.eligible;
+  const canRetry = retry?.eligible && (retry.action !== 'retranscribe' || isAdmin);
 
   async function run() {
     setBusy(true); setErr(null);
@@ -42,6 +43,19 @@ function RetryBanner({ meeting, retry, onDone }) {
     }
   }
 
+  async function runTranscription() {
+    setBusy(true); setErr(null);
+    try {
+      const r = await api.retranscribeMeeting(meeting.id);
+      if (!r.ok) setErr(r.error || r.reason || 'Retranscription failed.');
+      else onDone?.();
+    } catch (e) {
+      setErr(e?.message || 'Retranscription failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="card p-5 mt-8 border-l-2" style={{ borderColor: 'var(--error)' }}>
       <div className="flex items-start gap-3">
@@ -50,8 +64,11 @@ function RetryBanner({ meeting, retry, onDone }) {
           <p className="text-[15px] font-semibold text-ink">{copy.title}</p>
           <p className="text-[13.5px] text-muted leading-relaxed mt-1">{copy.body}</p>
           {!canRetry && retry?.reason && <p className="text-[13px] text-error mt-2">{retry.reason}</p>}
+          {retry?.eligible && retry.action === 'retranscribe' && !isAdmin && (
+            <p className="text-[13px] text-muted mt-2">An administrator is required to retry transcription from retained audio.</p>
+          )}
           {err && <p className="text-[13px] text-error mt-2">{err}</p>}
-          <div className="mt-3.5 flex items-center gap-2">
+          <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <button onClick={run} disabled={!canRetry || busy} className="btn btn-primary !py-2">
               {busy ? (
                 <span className="inline-flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />Retrying…</span>
@@ -59,7 +76,52 @@ function RetryBanner({ meeting, retry, onDone }) {
                 <span className="inline-flex items-center gap-2"><Icon.Refresh width={15} height={15} />Retry {retry?.action === 'retranscribe' ? 'transcription' : 'summary'}</span>
               )}
             </button>
+            {isAdmin && retranscribe?.eligible && (
+              <button onClick={runTranscription} disabled={busy} className="btn btn-ghost !py-2">
+                {busy ? 'Transcribing…' : 'Re-transcribe from audio'}
+              </button>
+            )}
           </div>
+          {isAdmin && retranscribe?.eligible && (
+            <p className="text-[12px] text-muted mt-2">
+              Replaces the saved transcript and summary using the retained recording.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeliveryBanner({ meeting, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function repost() {
+    setBusy(true); setErr(null);
+    try {
+      await api.repostMeeting(meeting.id);
+      onDone?.();
+    } catch (e) {
+      setErr(e?.message || 'Re-post failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card p-5 mt-8 border-l-2" style={{ borderColor: 'var(--warn)' }}>
+      <div className="flex items-start gap-3">
+        <Icon.Alert width={20} height={20} className="text-warn shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold text-ink">Notes saved, delivery failed</p>
+          <p className="text-[13.5px] text-muted leading-relaxed mt-1">
+            {meeting.delivery_error || 'The summary is available here, but it could not be posted to Discord.'}
+          </p>
+          {err && <p className="text-[13px] text-error mt-2">{err}</p>}
+          <button onClick={repost} disabled={busy} className="btn btn-primary !py-2 mt-3.5">
+            {busy ? 'Re-posting…' : 'Re-post to Discord'}
+          </button>
         </div>
       </div>
     </div>
@@ -288,10 +350,12 @@ function MeetingNav({ meetings, id }) {
 /* ── note document ────────────────────────────────────────────────────── */
 function Note({ data, todos, guildId, meetings, refetchTodos, onReload }) {
   const { meeting, summary, attendees, utterances, retry } = data;
+  const { user } = useAuth();
   const notes = summary?.notes;
   const duration = fmtDuration(meeting.started_at, meeting.ended_at);
   const meetingTodos = todos.filter((t) => String(t.meeting_id) === String(meeting.id));
   const isFailed = ['transcription_failed', 'summary_failed', 'processing'].includes(meeting.status);
+  const deliveryFailed = meeting.status === 'done' && !meeting.delivered && !!meeting.delivery_error;
 
   return (
     <article className="max-w-[760px] mx-auto pb-12 animate-fade-up">
@@ -321,7 +385,8 @@ function Note({ data, todos, guildId, meetings, refetchTodos, onReload }) {
         )}
       </header>
 
-      {isFailed && <RetryBanner meeting={meeting} retry={retry} onDone={onReload} />}
+      {isFailed && <RetryBanner meeting={meeting} retry={retry} retranscribe={data.retranscribe} isAdmin={user?.isAdmin} onDone={onReload} />}
+      {deliveryFailed && <DeliveryBanner meeting={meeting} onDone={onReload} />}
 
       {!notes && !isFailed && <p className="text-sm text-muted mt-8">No summary available — status: {meeting.status}.</p>}
 

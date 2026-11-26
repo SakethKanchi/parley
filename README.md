@@ -115,7 +115,7 @@ A fully self-hosted alternative to Otter/Fathom/Fireflies, built for Discord. Au
 - **Local or cloud speech-to-text.** Run a warm [faster-whisper](https://github.com/SYSTRAN/faster-whisper) sidecar (fully offline, free — **uses your NVIDIA GPU automatically** when available, with CPU fallback, and **batched inference** for 1.7–2.6x throughput), or point transcription at a cloud Whisper API like [OpenAI](https://platform.openai.com/docs/guides/speech-to-text). Switch per-server in Settings, no sidecar required.
 - **Self-host in one command.** `docker compose up -d` runs the bot, the whisper sidecar, and the dashboard together. No public IP or port forwarding needed.
 - **Searchable history.** `/history`, `/summary`, `/raw`, and full-text `/search` over every past meeting, backed by SQLite FTS5.
-- **Resilient.** A failed track doesn't sink the meeting (per-track error tolerance), the bot recovers from voice disconnects, and failed transcriptions or summaries are retryable with one click from the dashboard (or the CLI).
+- **Resilient.** A failed track doesn't sink the meeting (per-track error tolerance), the bot recovers from voice disconnects, and failed transcriptions or summaries are retryable from the dashboard (or CLI). Admins can also re-transcribe a failed meeting from retained audio.
 - **Auto join/leave.** Joins when 2+ people are talking, leaves when the room empties. Shows `[REC]` in its nickname while recording.
 - **Concurrent meetings.** Records multiple channels/servers at once — no global single-recording limit.
 

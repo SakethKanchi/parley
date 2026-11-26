@@ -14,12 +14,12 @@ import { SUMMARY_PROMPT } from '../adapters/summarizer/notes.js';
 import { listModels, clearModelCache, DEFAULT_MODELS, CATALOG_PROVIDERS } from '../adapters/summarizer/models.js';
 import { secretStatus, setProviderKey, isSecretProvider, connectionStatus, setConnection } from '../store/secrets.js';
 import { COMMAND_CATALOG } from '../commands/definitions.js';
-import { retryMeeting, retryPlan, RETRYABLE_STATUSES } from '../pipeline/retry.js';
+import { retryMeeting, retryPlan, hasRetainedAudio, RETRYABLE_STATUSES, RETRANSCRIBABLE_STATUSES } from '../pipeline/retry.js';
 import { availableSttProviders } from '../adapters/stt/index.js';
 import { requireAdmin } from './auth.js';
 
-function audioDir(id) {
-  return join(env.dataDir, 'audio', String(id));
+function audioDir(id, dataDir = env.dataDir) {
+  return join(dataDir, 'audio', String(id));
 }
 
 function guildName(client, id, dbNames = {}) {
@@ -36,13 +36,30 @@ function anyGuildUsesSidecar(db) {
   } catch { return true; }
 }
 
-export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
+export function apiRouter({ db, bot = null, client = null, sidecar = null, dataDir = env.dataDir }) {
   const r = Router();
   // The live Discord client may not exist yet (bot starts lazily once creds are
   // set). Always resolve it fresh from the controller so routes pick it up the
   // moment the bot connects, without rebuilding the router. `client` is still
   // accepted directly for tests and the standalone server.
   const liveClient = () => bot?.client || client;
+
+  function meetingDelivery(meeting) {
+    const c = liveClient();
+    return c
+      ? async (notes, talktime) => {
+          const cfg = getGuildConfig(db, meeting.guild_id);
+          const { postNotes } = await import('../delivery/post.js');
+          await postNotes({ client: c, meeting, cfg, notes, talktime });
+        }
+      : null;
+  }
+
+  function requireAdminForTranscription(req, res, next) {
+    const plan = retryPlan(db, Number(req.params.id), { dataDir });
+    if (plan.action === 'retranscribe') return requireAdmin(req, res, next);
+    next();
+  }
 
   // Active recordings for a guild, enriched with the voice channel's current
   // members (so the UI can show who's live). Reads in-memory bot sessions; empty
@@ -80,7 +97,11 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
   });
 
   r.get('/guilds/:g/meetings', (req, res) => {
-    res.json(db.listRecentRich(req.params.g, 100));
+    const meetings = db.listRecentRich(req.params.g, 100);
+    res.json(meetings.map((meeting) => ({
+      ...meeting,
+      can_retranscribe: RETRANSCRIBABLE_STATUSES.has(meeting.status) && hasRetainedAudio(dataDir, meeting.id),
+    })));
   });
 
   // In-progress recordings for this guild, enriched with the channel's current
@@ -118,13 +139,18 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
     const id = Number(req.params.id);
     const meeting = db.getMeeting(id);
     if (!meeting) return res.status(404).json({ error: 'meeting not found' });
-    const plan = retryPlan(db, id, { dataDir: env.dataDir });
+    const plan = retryPlan(db, id, { dataDir });
+    const retranscribePlan = retryPlan(db, id, { dataDir, forceTranscribe: true });
     res.json({
       meeting,
       summary: db.getSummary(id),
       attendees: db.listAttendees(id),
       utterances: db.listUtterances(id),
       retry: { eligible: RETRYABLE_STATUSES.has(meeting.status) && plan.ok, action: plan.action, reason: plan.reason || null },
+      retranscribe: {
+        eligible: RETRYABLE_STATUSES.has(meeting.status) && retranscribePlan.ok,
+        reason: retranscribePlan.reason || null,
+      },
     });
   });
 
@@ -165,24 +191,65 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
   // Retry a failed/stuck meeting: re-summarize if the transcript survived, else
   // re-transcribe from the saved PCM. Posts to Discord too when a live client
   // is attached. Returns the new status so the UI can refresh.
-  r.post('/meetings/:id/retry', async (req, res) => {
+  r.post('/meetings/:id/retry', requireAdminForTranscription, async (req, res) => {
     const id = Number(req.params.id);
     const meeting = db.getMeeting(id);
     if (!meeting) return res.status(404).json({ error: 'meeting not found' });
-    const c = liveClient();
-    const deliver = c
-      ? async (notes, talktime) => {
-          const cfg = getGuildConfig(db, meeting.guild_id);
-          const { postNotes } = await import('../delivery/post.js');
-          await postNotes({ client: c, meeting, cfg, notes, talktime });
-        }
-      : null;
     try {
-      const result = await retryMeeting(db, id, { dataDir: env.dataDir, deliver });
+      const result = await retryMeeting(db, id, { dataDir, deliver: meetingDelivery(meeting) });
       if (!result.ok) return res.status(502).json({ error: result.reason || 'Retry failed.', ...result });
       res.json({ ok: true, ...result, meeting: db.getMeeting(id) });
     } catch (e) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin-only full retranscription from retained PCM, followed by new notes and
+  // delivery. This deliberately ignores any saved transcript to recover partial
+  // or incorrect transcription.
+  r.post('/meetings/:id/retranscribe', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const meeting = db.getMeeting(id);
+    if (!meeting) return res.status(404).json({ error: 'meeting not found' });
+    const plan = retryPlan(db, id, { dataDir, forceTranscribe: true });
+    if (!plan.ok) return res.status(409).json({ error: plan.reason });
+    try {
+      const result = await retryMeeting(db, id, {
+        dataDir,
+        deliver: meetingDelivery(meeting),
+        forceTranscribe: true,
+      });
+      if (!result.ok) return res.status(502).json({ error: result.reason || 'Retranscription failed.', ...result });
+      res.json({ ok: true, ...result, meeting: db.getMeeting(id) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Re-post an existing summary without re-running transcription or summarization.
+  r.post('/meetings/:id/repost', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const meeting = db.getMeeting(id);
+    if (!meeting) return res.status(404).json({ error: 'meeting not found' });
+    const summary = db.getSummary(id);
+    if (!summary) return res.status(409).json({ error: 'This meeting has no saved summary to post.' });
+    const c = liveClient();
+    if (!c) return res.status(503).json({ error: 'Discord is not connected.' });
+
+    db.setPipelineStage(id, 'delivering');
+    try {
+      const cfg = getGuildConfig(db, meeting.guild_id);
+      const { postNotes } = await import('../delivery/post.js');
+      await postNotes({ client: c, meeting, cfg, notes: summary.notes, talktime: summary.talktime || [] });
+      db.setDeliveryStatus(id, true, null);
+      db.setPipelineStage(id, 'completed');
+      res.json({ ok: true, meeting: db.getMeeting(id) });
+    } catch (err) {
+      const message = err.message || String(err);
+      db.setDeliveryStatus(id, false, message);
+      db.setPipelineStage(id, 'delivering', message);
+      console.error(`[repost] meeting ${id} delivery failed: ${message}`);
+      res.status(502).json({ error: message, meeting: db.getMeeting(id) });
     }
   });
 
@@ -191,7 +258,7 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
     const meeting = db.getMeeting(id);
     if (!meeting) return res.status(404).json({ error: 'meeting not found' });
     db.deleteMeeting(id);
-    await rm(audioDir(id), { recursive: true, force: true }).catch(() => {});
+    await rm(audioDir(id, dataDir), { recursive: true, force: true }).catch(() => {});
     res.json({ ok: true });
   });
 
@@ -228,15 +295,22 @@ export function apiRouter({ db, bot = null, client = null, sidecar = null }) {
     };
     try {
       const summarizer = getSummarizer(cfg);
+      db.setMeetingStatus(targetId, 'processing');
+      db.setPipelineStage(targetId, 'summarizing');
       const notes = await summarizer.summarize(transcript, meta);
       db.clearSummary(targetId);
       db.saveSummary(targetId, notes, talktime, summarizer.lastUsed ?? `${cfg.summarizerProvider}:${cfg.summarizerModel || ''}`);
       db.seedTodos(targetId, target.guild_id, notes.actionItems || [], target.started_at);
+      db.setMeetingStatus(targetId, 'done');
+      db.setPipelineStage(targetId, 'completed');
+      db.setDeliveryStatus(targetId, false, null);
     } catch (e) {
       // Data is already merged; surface the summarize failure but don't unwind.
+      db.setMeetingStatus(targetId, 'summary_failed');
+      db.setPipelineStage(targetId, 'summarizing', e.message || String(e));
       return res.status(502).json({ error: e.message, merged });
     }
-    for (const sid of merged) await rm(audioDir(sid), { recursive: true, force: true }).catch(() => {});
+    for (const sid of merged) await rm(audioDir(sid, dataDir), { recursive: true, force: true }).catch(() => {});
     res.json({ ok: true, merged });
   });
 

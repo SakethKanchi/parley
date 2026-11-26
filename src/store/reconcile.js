@@ -22,7 +22,16 @@ export async function reconcileOnBoot(db, audioRoot, { readdir = readdirSync, re
 
   // 1) Orphaned meetings from a crash mid-pipeline.
   for (const m of db.findOrphanedMeetings()) {
-    db.setMeetingStatus(m.id, 'transcription_failed');
+    if (m.pipeline_stage === 'summarizing') {
+      db.setMeetingStatus(m.id, 'summary_failed');
+      db.setPipelineStage(m.id, 'summarizing', m.stage_error || 'Interrupted by process restart');
+    } else if (m.pipeline_stage === 'delivering') {
+      db.setMeetingStatus(m.id, 'done');
+      db.setPipelineStage(m.id, 'delivering', m.stage_error || 'Delivery interrupted by process restart');
+    } else {
+      db.setMeetingStatus(m.id, 'transcription_failed');
+      db.setPipelineStage(m.id, m.pipeline_stage || 'captured', m.stage_error || 'Interrupted by process restart');
+    }
     result.orphanMeetings += 1;
     log.warn?.(`[reconcile] meeting ${m.id} was mid-pipeline at last shutdown → transcription_failed (retry from the dashboard).`);
   }

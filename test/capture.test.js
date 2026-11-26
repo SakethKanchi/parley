@@ -26,7 +26,7 @@ import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { attachCapture } from '../src/voice/capture.js';
+import { attachCapture, SPEAKER_SILENCE_MS } from '../src/voice/capture.js';
 
 // Minimal stand-ins for the discord.js voice receiver + guild so we can drive
 // speaking-start events deterministically without a live connection. subscribe
@@ -36,7 +36,8 @@ function fakeConnection() {
   return {
     receiver: {
       speaking,
-      subscribe() {
+      subscribe(_userId, options) {
+        this.lastOptions = options;
         const s = new EventEmitter();
         s.pipe = () => s;            // opusStream.pipe(decoder).pipe(out)
         s.destroy = () => {};
@@ -49,6 +50,20 @@ function fakeConnection() {
 function fakeGuild(members) {
   return { members: { cache: { get: (id) => members[id] } } };
 }
+
+test('capture uses a 3-second silence threshold to reduce tiny speech tracks', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parley-cap-silence-'));
+  try {
+    const connection = fakeConnection();
+    const guild = fakeGuild({ u1: { displayName: 'Alice', user: { bot: false } } });
+    const registry = new TrackRegistry();
+    const { stopAll } = attachCapture({ connection, guild, audioDir: dir, registry });
+    connection.receiver.speaking.emit('start', 'u1');
+    assert.equal(SPEAKER_SILENCE_MS, 3000);
+    assert.equal(connection.receiver.lastOptions.end.duration, SPEAKER_SILENCE_MS);
+    await stopAll();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('stopAll detaches the speaking listener so post-stop speech is ignored', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'parley-cap-'));

@@ -6,7 +6,11 @@ CREATE TABLE IF NOT EXISTS meetings (
   guild_id TEXT, channel_id TEXT, channel_name TEXT,
   started_at TEXT, ended_at TEXT,
   status TEXT NOT NULL DEFAULT 'recording',
-  transcription_complete INTEGER
+  transcription_complete INTEGER,
+  pipeline_stage TEXT,
+  stage_error TEXT,
+  delivered INTEGER NOT NULL DEFAULT 0,
+  delivery_error TEXT
 );
 CREATE TABLE IF NOT EXISTS attendees (
   meeting_id INTEGER, user_id TEXT, display_name TEXT,
@@ -77,6 +81,18 @@ export function openDb(path) {
   if (!meetingCols.some((c) => c.name === 'transcription_complete')) {
     sql.exec(`ALTER TABLE meetings ADD COLUMN transcription_complete INTEGER`);
   }
+  if (!meetingCols.some((c) => c.name === 'pipeline_stage')) {
+    sql.exec(`ALTER TABLE meetings ADD COLUMN pipeline_stage TEXT`);
+  }
+  if (!meetingCols.some((c) => c.name === 'stage_error')) {
+    sql.exec(`ALTER TABLE meetings ADD COLUMN stage_error TEXT`);
+  }
+  if (!meetingCols.some((c) => c.name === 'delivered')) {
+    sql.exec(`ALTER TABLE meetings ADD COLUMN delivered INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!meetingCols.some((c) => c.name === 'delivery_error')) {
+    sql.exec(`ALTER TABLE meetings ADD COLUMN delivery_error TEXT`);
+  }
 
   // Migration: add summary_language to dbs created before the column existed.
   const cols = sql.prepare(`PRAGMA table_info(guild_config)`).all();
@@ -112,8 +128,8 @@ export function openDb(path) {
     sql,
     createMeeting({ guildId, channelId, channelName, startedAt }) {
       const r = sql.prepare(
-        `INSERT INTO meetings (guild_id, channel_id, channel_name, started_at, status)
-         VALUES (?, ?, ?, ?, 'recording')`
+        `INSERT INTO meetings (guild_id, channel_id, channel_name, started_at, status, pipeline_stage)
+         VALUES (?, ?, ?, ?, 'recording', 'captured')`
       ).run(guildId, channelId, channelName, startedAt);
       return r.lastInsertRowid;
     },
@@ -173,6 +189,14 @@ export function openDb(path) {
       sql.prepare(`UPDATE meetings SET status = ?, ended_at = COALESCE(ended_at, ?) WHERE id = ?`)
         .run(status, endedAt, id);
     },
+    setPipelineStage(id, stage, error = null) {
+      sql.prepare(`UPDATE meetings SET pipeline_stage = ?, stage_error = ? WHERE id = ?`)
+        .run(stage, error, id);
+    },
+    setDeliveryStatus(id, delivered, error = null) {
+      sql.prepare(`UPDATE meetings SET delivered = ?, delivery_error = ? WHERE id = ?`)
+        .run(delivered ? 1 : 0, error, id);
+    },
     listRecent(guildId, limit = 10) {
       return sql.prepare(
         `SELECT m.*, (SELECT COUNT(*) FROM utterances u WHERE u.meeting_id = m.id) AS utterance_count
@@ -180,7 +204,12 @@ export function openDb(path) {
       ).all(guildId, limit);
     },
     findOrphanedMeetings() {
-      return sql.prepare(`SELECT * FROM meetings WHERE status IN ('recording','processing') ORDER BY id`).all();
+      return sql.prepare(
+        `SELECT * FROM meetings
+         WHERE status IN ('recording','processing')
+            OR (status = 'done' AND pipeline_stage = 'delivering')
+         ORDER BY id`
+      ).all();
     },
     addAttendee(meetingId, userId, displayName) {
       sql.prepare(`INSERT OR IGNORE INTO attendees (meeting_id, user_id, display_name) VALUES (?, ?, ?)`)

@@ -28,6 +28,7 @@ export class MeetingManager {
       // Capture wiring failed (e.g. mkdir/permission error): don't leave a
       // phantom 'recording' row that the orphan sweep later has to clean up.
       this.db.setMeetingStatus(meetingId, 'transcription_failed');
+      this.db.setPipelineStage(meetingId, 'captured', err.message || String(err));
       throw err;
     }
     this.active.set(k, { meetingId, guildId, channelId, channelName, startedAt, connection, guild, registry, stopAll, audioDir });
@@ -54,6 +55,7 @@ export class MeetingManager {
 
     const stoppedAt = this.now();
     this.db.setMeetingStatus(session.meetingId, 'processing', stoppedAt);
+    this.db.setPipelineStage(session.meetingId, 'transcribing');
     this.processing.set(session.meetingId, {
       meetingId: session.meetingId,
       guildId: session.guildId,
@@ -76,7 +78,13 @@ export class MeetingManager {
         console.error(`[pipeline] meeting ${session.meetingId} finalize threw (unhandled): ${err?.stack || err}`);
         try {
           const m = this.db.getMeeting(session.meetingId);
-          if (m && m.status === 'processing') this.db.setMeetingStatus(session.meetingId, 'transcription_failed');
+            if (m && m.status === 'processing') {
+              this.db.setMeetingStatus(session.meetingId,
+                m.pipeline_stage === 'summarizing' ? 'summary_failed' : 'transcription_failed');
+              this.db.setPipelineStage(session.meetingId,
+                m.pipeline_stage || 'transcribing',
+                err?.message || String(err));
+            }
         } catch { /* leave it */ }
         throw err;
       })

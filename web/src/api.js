@@ -8,7 +8,12 @@ const json = async (r) => {
   // Surface auth failures distinctly so the app can redirect to /login.
   if (r.status === 401) {
     if (onUnauthorized) { try { onUnauthorized(); } catch { /* ignore */ } }
-    const err = new Error('Not authenticated');
+    let message = 'Not authenticated';
+    try {
+      const body = await r.json();
+      if (typeof body?.error === 'string') message = body.error;
+    } catch { /* non-JSON body */ }
+    const err = new Error(message);
     err.status = 401;
     return Promise.reject(err);
   }
@@ -54,6 +59,8 @@ export const api = {
   mergeMeetings: (id, sourceIds) => fetch(`/api/meetings/${id}/merge`, jsonBody('POST', { sourceIds })).then(json),
   search: (g, q) => fetch(`/api/guilds/${g}/search?q=${encodeURIComponent(q)}`).then(json),
   retryMeeting: (id) => fetch(`/api/meetings/${id}/retry`, { method: 'POST' }).then(json),
+  retranscribeMeeting: (id) => fetch(`/api/meetings/${id}/retranscribe`, { method: 'POST' }).then(json),
+  repostMeeting: (id) => fetch(`/api/meetings/${id}/repost`, { method: 'POST' }).then(json),
   commands: () => fetch('/api/commands').then(json),
   config: (g) => fetch(`/api/guilds/${g}/config`).then(json),
   saveConfig: (g, patch) => fetch(`/api/guilds/${g}/config`, jsonBody('PATCH', patch)).then(json),

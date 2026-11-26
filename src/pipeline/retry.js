@@ -22,20 +22,39 @@ import { processMeeting } from './orchestrator.js';
 
 // Statuses the UI should offer a retry for.
 export const RETRYABLE_STATUSES = new Set(['transcription_failed', 'summary_failed', 'processing', 'recording']);
+export const RETRANSCRIBABLE_STATUSES = new Set(['transcription_failed', 'summary_failed']);
+const retryInFlight = new Set();
+
+export function hasRetainedAudio(dataDir, meetingId, { exists = readdirSync } = {}) {
+  try {
+    return exists(join(dataDir, 'audio', String(meetingId))).some((file) => file.endsWith('.pcm'));
+  } catch {
+    return false;
+  }
+}
 
 /** Decide what a retry would do, without doing it (for enabling UI + messaging). */
-export function retryPlan(db, meetingId, { dataDir, exists = readdirSync } = {}) {
+export function retryPlan(db, meetingId, { dataDir, exists = readdirSync, forceTranscribe = false } = {}) {
   const meeting = db.getMeeting(meetingId);
   if (!meeting) return { ok: false, action: 'none', reason: 'Meeting not found.' };
+  if (meeting.status === 'done') return { ok: false, action: 'none', meeting, reason: 'This meeting is already complete.' };
+  if (meeting.status === 'processing' || meeting.status === 'recording') return { ok: false, action: 'none', meeting, reason: 'This meeting is already active or processing.' };
+  const hasAudio = hasRetainedAudio(dataDir, meetingId, { exists });
+  if (forceTranscribe) {
+    if (!RETRANSCRIBABLE_STATUSES.has(meeting.status)) {
+      return { ok: false, action: 'none', meeting, reason: 'Only failed meetings can be re-transcribed.' };
+    }
+    if (hasAudio) return { ok: true, action: 'retranscribe', meeting };
+    return { ok: false, action: 'none', meeting, reason: 'No saved audio remains for this meeting, so it cannot be re-transcribed.' };
+  }
   const hasUtterances = db.listUtterances(meetingId).length > 0;
-  let pcmCount = 0;
-  try { pcmCount = exists(join(dataDir, 'audio', String(meetingId))).filter((f) => f.endsWith('.pcm')).length; }
-  catch { pcmCount = 0; }
-  if (pcmCount > 0 && meeting.transcription_complete !== 1) {
+  // If a failed summary has saved transcript text, retry only summarization.
+  if (hasUtterances && meeting.status === 'summary_failed') return { ok: true, action: 'resummarize', meeting };
+  if (hasAudio && meeting.transcription_complete !== 1) {
     return { ok: true, action: 'retranscribe', meeting };
   }
   if (hasUtterances) return { ok: true, action: 'resummarize', meeting };
-  if (pcmCount > 0) return { ok: true, action: 'retranscribe', meeting };
+  if (hasAudio) return { ok: true, action: 'retranscribe', meeting };
   return { ok: false, action: 'none', meeting,
     reason: 'No transcript and no saved audio remain for this meeting, so it cannot be retried.' };
 }
@@ -44,8 +63,8 @@ export function retryPlan(db, meetingId, { dataDir, exists = readdirSync } = {})
  * Execute the retry. `deps.deliver` (optional) posts to Discord when a live
  * client is available; omit it for the dashboard (notes just show in the UI).
  */
-export async function retryMeeting(db, meetingId, { dataDir, deliver = null } = {}) {
-  const plan = retryPlan(db, meetingId, { dataDir });
+async function retryMeetingUnlocked(db, meetingId, { dataDir, deliver = null, forceTranscribe = false, transcribe } = {}) {
+  const plan = retryPlan(db, meetingId, { dataDir, forceTranscribe });
   if (!plan.ok) return { ok: false, action: plan.action, status: db.getMeeting(meetingId)?.status, reason: plan.reason };
 
   const meeting = plan.meeting;
@@ -64,12 +83,14 @@ export async function retryMeeting(db, meetingId, { dataDir, deliver = null } = 
       summaryPrompt: cfg.summaryPrompt,
     };
     db.setMeetingStatus(meetingId, 'processing');
+    db.setPipelineStage(meetingId, 'summarizing');
     let notes;
     const summarizer = getSummarizer(cfg);
     try {
       notes = await summarizer.summarize(transcript, meta);
     } catch (err) {
       db.setMeetingStatus(meetingId, 'summary_failed');
+      db.setPipelineStage(meetingId, 'summarizing', err.message || String(err));
       return { ok: false, action: 'resummarize', status: 'summary_failed',
         reason: err.userMessage ?? describeSummarizerError(err, cfg.summarizerProvider) };
     }
@@ -77,7 +98,23 @@ export async function retryMeeting(db, meetingId, { dataDir, deliver = null } = 
     db.saveSummary(meetingId, notes, talktime, summarizer.lastUsed ?? `${cfg.summarizerProvider}:${cfg.summarizerModel || ''}`);
     db.seedTodos(meetingId, meeting.guild_id, notes.actionItems || [], meeting.started_at);
     db.setMeetingStatus(meetingId, 'done', new Date().toISOString());
-    if (deliver) await deliver(notes, talktime, meta).catch(() => {});
+    db.setPipelineStage(meetingId, 'summarized');
+    if (deliver) {
+      db.setPipelineStage(meetingId, 'delivering');
+      try {
+        await deliver(notes, talktime, meta);
+        db.setDeliveryStatus(meetingId, true, null);
+        db.setPipelineStage(meetingId, 'completed');
+      } catch (err) {
+        const message = err.message || String(err);
+        db.setDeliveryStatus(meetingId, false, message);
+        db.setPipelineStage(meetingId, 'delivering', message);
+        console.error(`[retry] meeting ${meetingId} resummarized but delivery failed: ${message}`);
+      }
+    } else {
+      db.setDeliveryStatus(meetingId, false, null);
+      db.setPipelineStage(meetingId, 'completed');
+    }
     return { ok: true, action: 'resummarize', status: 'done' };
   }
 
@@ -92,7 +129,7 @@ export async function retryMeeting(db, meetingId, { dataDir, deliver = null } = 
     })
     .sort((a, b) => a.startMs - b.startMs);
   try {
-    const { notes, empty } = await processMeeting(db, meetingId, { tracks, cfg, deliver });
+    const { notes, empty } = await processMeeting(db, meetingId, { tracks, cfg, deliver, transcribe });
     // Success (or a confirmed-empty meeting): the PCM has served its purpose, so
     // drop the audio dir. The bot's own finalize does this too, but a retry runs
     // outside that path and would otherwise leak the directory forever.
@@ -104,4 +141,11 @@ export async function retryMeeting(db, meetingId, { dataDir, deliver = null } = 
     return { ok: false, action: 'retranscribe', status,
       reason: err.userMessage || describeSummarizerError(err, cfg.summarizerProvider) };
   }
+}
+
+export async function retryMeeting(db, meetingId, options = {}) {
+  if (retryInFlight.has(meetingId)) return { ok: false, action: 'none', status: db.getMeeting(meetingId)?.status, reason: 'A retry is already running for this meeting.' };
+  retryInFlight.add(meetingId);
+  try { return await retryMeetingUnlocked(db, meetingId, options); }
+  finally { retryInFlight.delete(meetingId); }
 }

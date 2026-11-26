@@ -5,6 +5,9 @@ from fastapi import FastAPI, UploadFile, File, Form
 
 log = logging.getLogger("stt_sidecar")
 
+# STT provider: "whisper" (default) or "qwen"
+STT_PROVIDER = os.environ.get("STT_PROVIDER", "whisper").lower()
+
 # Device selection (audit B2): STT_DEVICE=auto tries cuda/float16 first and falls
 # back to cpu/int8 on any init failure. Explicit values are used as-is.
 STT_DEVICE = os.environ.get("STT_DEVICE", "auto")
@@ -40,10 +43,16 @@ def _preload_cuda_libs():
 if STT_DEVICE in ("auto", "cuda"):
     _preload_cuda_libs()
 
-from faster_whisper import WhisperModel, BatchedInferencePipeline  # noqa: E402 (must follow lib preload above)
+# Load provider-specific imports
+if STT_PROVIDER == "qwen":
+    import torchaudio
+    import librosa
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+else:
+    from faster_whisper import WhisperModel, BatchedInferencePipeline  # noqa: E402
 
 app = FastAPI()
-_state = {"model": None, "model_name": None, "device": None, "compute": None, "batched": None}
+_state = {"model": None, "model_name": None, "device": None, "compute": None, "batched": None, "provider": STT_PROVIDER}
 
 
 def _resolve_batch_size():
@@ -66,7 +75,7 @@ def _candidates():
         ("cpu", STT_COMPUTE if STT_COMPUTE != "auto" else "int8"),
     ]
 
-def get_model(name: str):
+def get_whisper_model(name: str):
     if _state["model"] is not None and _state["model_name"] == name:
         return _state["model"]  # warm: rebuilds only when the requested model name changes
     candidates = _candidates()
@@ -74,15 +83,10 @@ def get_model(name: str):
     for device, compute in candidates:
         try:
             model = WhisperModel(name, device=device, compute_type=compute)
-            # Model *construction* can succeed on cuda even when the runtime is
-            # broken (e.g. pip nvidia libs not on the loader path): ctranslate2
-            # only dlopen()s cublas/cudnn lazily on the first inference call.
-            # Do a throwaway inference here so a broken cuda runtime falls back
-            # to cpu instead of 500ing every real /transcribe request.
             if device != "cpu":
                 warmup_segments, _ = model.transcribe(np.zeros(1600, dtype=np.float32))
-                list(warmup_segments)  # transcribe() is lazy; force real inference now
-        except Exception as err:  # e.g. no CUDA runtime / missing cuDNN — fall back
+                list(warmup_segments)
+        except Exception as err:
             last_err = err
             log.warning("STT device %s/%s unavailable (%s); falling back", device, compute, err)
             continue
@@ -93,6 +97,28 @@ def get_model(name: str):
     raise last_err
 
 
+def get_qwen_model():
+    """Load Qwen audio model for transcription."""
+    if _state["model"] is not None and _state["model_name"] == "qwen-audio":
+        return _state["model"]
+    try:
+        device = "cuda" if (STT_DEVICE == "auto" or STT_DEVICE == "cuda") else "cpu"
+        model_name = "Qwen/Qwen-Audio-Chat"
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            device_map=device,
+            torch_dtype="auto",
+            trust_remote_code=True
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        _state.update(model=(model, tokenizer), model_name="qwen-audio", device=device, compute="auto")
+        log.info("Qwen audio model loaded on %s", device)
+        return (model, tokenizer)
+    except Exception as err:
+        log.error("Failed to load Qwen model: %s", err)
+        raise
+
+
 def get_batched():
     """Lazily wrap the warm model in a BatchedInferencePipeline, cached until the
     model rebuilds. Returns None if batching is disabled or the model can't be
@@ -101,14 +127,11 @@ def get_batched():
         return None
     if _state["batched"] is not None:
         return _state["batched"]
-    # A real faster-whisper model exposes feature_extractor; the batched pipeline
-    # needs it. Guard so fakes/unsupported models fall back cleanly instead of
-    # raising deep inside transcribe().
     if not hasattr(_state["model"], "feature_extractor"):
         return None
     try:
         _state["batched"] = BatchedInferencePipeline(model=_state["model"])
-    except Exception as err:  # unsupported — fall back
+    except Exception as err:
         log.warning("Batched pipeline unavailable (%s); using sequential", err)
         _state["batched"] = None
     return _state["batched"]
@@ -117,25 +140,28 @@ def get_batched():
 def health():
     return {
         "status": "ok",
+        "provider": _state["provider"],
         "model": _state["model_name"],
         "device": _state["device"],
         "compute": _state["compute"],
-        "batch_size": _resolve_batch_size(),
+        "batch_size": _resolve_batch_size() if _state["provider"] == "whisper" else "N/A",
     }
 
-# Plain `def` (audit B1): FastAPI runs sync endpoints in its threadpool, so the
-# event loop — and /health — stay responsive during long transcriptions.
 @app.post("/transcribe")
 def transcribe(file: UploadFile = File(...), model: str = Form("small"), language: str = Form("auto")):
-    m = get_model(model)
+    if STT_PROVIDER == "qwen":
+        return _transcribe_qwen(file, language)
+    else:
+        return _transcribe_whisper(file, model, language)
+
+def _transcribe_whisper(file: UploadFile, model: str, language: str):
+    m = get_whisper_model(model)
     suffix = os.path.splitext(file.filename or "a.wav")[1] or ".wav"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(file.file.read())
         path = tmp.name
     try:
         lang = None if language == "auto" else language
-        # Prefer the batched pipeline (parallel VAD segments, 1.7-2.6x faster);
-        # fall back to the plain model when batching is off/unavailable.
         batched = get_batched()
         if batched is not None:
             segments, info = batched.transcribe(
@@ -154,7 +180,38 @@ def transcribe(file: UploadFile = File(...), model: str = Form("small"), languag
         try:
             os.unlink(path)
         except OSError:
-            pass  # cleanup failure must not mask a transcription error
+            pass
+
+def _transcribe_qwen(file: UploadFile, language: str):
+    """Transcribe using Qwen audio model."""
+    model, tokenizer = get_qwen_model()
+    suffix = os.path.splitext(file.filename or "a.wav")[1] or ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(file.file.read())
+        path = tmp.name
+    try:
+        # Load audio with librosa
+        waveform, sample_rate = librosa.load(path, sr=16000)
+        # Prepare input for Qwen
+        inputs = tokenizer(
+            {"audio": waveform},
+            return_tensors="pt",
+            sampling_rate=sample_rate
+        )
+        # Transcribe
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=512)
+        text = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
+        return {
+            "text": text,
+            "words": [],  # Qwen doesn't provide word-level timestamps
+            "language": language
+        }
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 if __name__ == "__main__":
     import uvicorn

@@ -358,6 +358,9 @@ test('D3: non-admin user gets 403 on admin-gated routes', async () => {
     const del = await fetch(`${base}/api/meetings/${id}`, { method: 'DELETE' });
     assert.equal(del.status, 403);
 
+    const retranscribe = await fetch(`${base}/api/meetings/${id}/retranscribe`, { method: 'POST' });
+    assert.equal(retranscribe.status, 403);
+
     const merge = await fetch(`${base}/api/meetings/${id}/merge`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceIds: [999] }),
     });
@@ -373,6 +376,8 @@ test('D3: non-admin user gets 403 on admin-gated routes', async () => {
 
 test('D3: admin user passes the admin-gated routes (rejected downstream, not by requireAdmin)', async () => {
   const db = openDb(':memory:');
+  const id = db.createMeeting({ guildId: 'g1', channelId: 'c', channelName: 'gen', startedAt: 'now' });
+  db.setMeetingStatus(id, 'transcription_failed');
   const { base, close } = await listen(appWithUser(db, { id: 1, username: 'root', isAdmin: true }));
   try {
     // Unmanaged bot/sidecar/provider paths still 400 for an admin — proves
@@ -384,6 +389,9 @@ test('D3: admin user passes the admin-gated routes (rejected downstream, not by 
 
     const botAction = await fetch(`${base}/api/system/bot/start`, { method: 'POST' });
     assert.equal(botAction.status, 400); // no bot controller attached, past the 403 gate
+
+    const retranscribe = await fetch(`${base}/api/meetings/${id}/retranscribe`, { method: 'POST' });
+    assert.equal(retranscribe.status, 409); // no retained audio, past the admin gate
   } finally { close(); }
 });
 

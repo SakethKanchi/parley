@@ -3,6 +3,9 @@ import prism from 'prism-media';
 import { EndBehaviorType } from '@discordjs/voice';
 import { pcmName } from './audio.js';
 
+// Avoid splitting speaker turns on brief pauses; each split adds a separate STT request.
+export const SPEAKER_SILENCE_MS = 3000;
+
 // Pure bookkeeping of per-user tracks for a single meeting; unit-testable.
 export class TrackRegistry {
   constructor() { this.active = new Map(); this.done = []; }
@@ -41,7 +44,7 @@ export function attachCapture({ connection, guild, audioDir, registry, now = () 
       const startMs = now();
       const pcmPath = `${audioDir}/${pcmName(userId, startMs)}`;
 
-      const opusStream = connection.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 } });
+      const opusStream = connection.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: SPEAKER_SILENCE_MS } });
       const decoder = new prism.opus.Decoder({ rate: 16000, channels: 1, frameSize: 320 });
       const out = createWriteStream(pcmPath);
       opusStream.pipe(decoder).pipe(out);
